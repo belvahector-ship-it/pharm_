@@ -86,3 +86,4 @@ Hasil:
 | Checkpoint HuggingFace gagal diunduh | Internet Notebook belum `On` |
 | Hanya 1 GPU terpakai | Accelerator belum `GPU T4 x2`; cek `import torch; torch.cuda.device_count()` harus 2 |
 | Dataset MoleculeNet gagal load | DeepChem butuh Internet `On`; atau taruh CSV di `data/raw/{dataset}.csv` sesuai `DATASET_SCHEMA` |
+| Sel clone terlihat "macet" (running terus, tidak selesai) | Repo **private** & clone jalan tanpa token → git menunggu prompt `Username`/`Password` di terminal, yang tidak bisa dijawab dari sel notebook. **Solusi**: buat GH_TOKEN (langkah di §1) & simpan sebagai Secret Kaggle, lalu Stop sel yang macet dan Run ulang. `notebooks/kaggle_bootstrap.ipynb` versi terbaru sudah otomatis pakai `GH_TOKEN` bila ada, dan gagal cepat (bukan menggantung) bila tidak ada. |
