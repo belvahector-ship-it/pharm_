@@ -11,6 +11,7 @@ blueprint-paper.md. JANGAN mengubah nilai bertanda audit tanpa memutakhirkan blu
 from __future__ import annotations
 
 import os
+import shutil
 
 # ---------------------------------------------------------------------------
 # Root & platform
@@ -185,6 +186,72 @@ CHECKPOINT = {
     "save_best_by": "val_loss",
     "resume_if_exists": True,   # penting: sesi Kaggle terbatas ~9-12 jam
 }
+
+# ---------------------------------------------------------------------------
+# Versi pipeline — untuk auto-invalidasi artefak basi (tanpa flag manual)
+# ---------------------------------------------------------------------------
+# DINAIKKAN hanya saat ada perubahan yang membuat artefak lama TIDAK kompatibel:
+# algoritma scaffold split, arsitektur model, atau format prediksi. Artefak (split,
+# prediksi, checkpoint) yang lahir dari versi berbeda otomatis dibersihkan; yang seversi
+# dipakai ulang (resume). Jadi TIDAK perlu "reset manual setiap run".
+#   v1 = rilis awal
+#   v2 = scaffold split deterministik (K1) + ChemBERTa tanpa pooler acak (S3)
+PIPELINE_VERSION = "2"
+
+VERSION_MARKER = _p("outputs", ".pipeline_version")
+
+
+def _write_version_marker() -> None:
+    os.makedirs(os.path.dirname(VERSION_MARKER), exist_ok=True)
+    with open(VERSION_MARKER, "w", encoding="utf-8") as f:
+        f.write(PIPELINE_VERSION)
+
+
+def artifacts_status() -> tuple[str, str | None]:
+    """Status artefak vs PIPELINE_VERSION: ('fresh'|'stale'|'empty', versi_tersimpan).
+
+    - fresh : marker cocok -> artefak valid, boleh dipakai ulang (resume).
+    - stale : marker beda / tak ada TAPI ada artefak lama -> harus dibersihkan.
+    - empty : tak ada marker & tak ada artefak -> sesi bersih, tinggal mulai.
+    """
+    if os.path.exists(VERSION_MARKER):
+        with open(VERSION_MARKER, encoding="utf-8") as f:
+            stored = f.read().strip()
+        return ("fresh" if stored == PIPELINE_VERSION else "stale", stored)
+    has_any = any(
+        os.path.isdir(PATHS[k]) and os.listdir(PATHS[k])
+        for k in ("splits", "predictions", "checkpoints")
+    )
+    return ("stale" if has_any else "empty", None)
+
+
+def refresh_artifacts_if_stale(verbose: bool = True) -> str:
+    """Cek dulu apakah ada artefak tersimpan yang VALID; hanya bersihkan bila basi.
+
+    Dipanggil di awal Fase 1. Menjawab "kenapa harus reset tiap run?" -> tidak perlu:
+    kalau versi cocok, artefak dipakai ulang (training resume/skip). Reset otomatis HANYA
+    saat versi berubah (kode breaking) atau ada artefak lama tanpa marker.
+    """
+    ensure_dirs()
+    status, stored = artifacts_status()
+    if status == "stale":
+        for key in ("splits", "predictions", "checkpoints", "results"):
+            d = PATHS[key]
+            if os.path.isdir(d):
+                shutil.rmtree(d, ignore_errors=True)
+            os.makedirs(d, exist_ok=True)
+        if verbose:
+            print(f"[versi] artefak basi (tersimpan={stored!r} != {PIPELINE_VERSION!r}) "
+                  f"-> dibersihkan otomatis.")
+    elif status == "fresh":
+        if verbose:
+            print(f"[versi] artefak valid (versi {PIPELINE_VERSION}) -> dipakai ulang "
+                  f"(training akan resume/skip yang sudah ada).")
+    else:  # empty
+        if verbose:
+            print(f"[versi] sesi bersih, belum ada artefak -> mulai fresh (versi {PIPELINE_VERSION}).")
+    _write_version_marker()
+    return status
 
 
 def ensure_dirs() -> None:

@@ -2,6 +2,16 @@
 
 Alur: kode di **GitHub** → `git clone` di **Kaggle Notebook (GPU T4 ×2)** → jalankan pipeline.
 
+## Artefak: auto-reuse / auto-reset (tanpa flag manual)
+Pipeline menyimpan penanda `outputs/.pipeline_version`. Saat `01_prepare_data` jalan:
+- **versi cocok** → artefak lama (split/prediksi/checkpoint) **dipakai ulang** → training
+  **resume/skip** yang sudah selesai. Jadi **tidak perlu "reset tiap run"**.
+- **versi berubah** (kode breaking, mis. algoritma split) atau ada artefak lama tanpa
+  penanda → **dibersihkan otomatis sekali**. Naikkan `config.PIPELINE_VERSION` saat membuat
+  perubahan yang membuat artefak lama tak kompatibel.
+
+Notebook utama **selalu full run** (3 dataset × 5 seed) — cukup **Run All**.
+
 ## 0. Setelan Notebook Kaggle
 Di panel kanan notebook Kaggle:
 - **Accelerator** → `GPU T4 x2` (wajib, agar ChemBERTa & D-MPNN paralel di 2 GPU).

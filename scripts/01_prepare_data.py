@@ -26,11 +26,15 @@ def main() -> None:
     config.ensure_dirs()
     set_seed(config.SPLIT["split_seed"])
 
+    # Cek dulu apakah ada artefak tersimpan yang VALID (versi cocok). Hanya bersihkan bila
+    # basi (kode/algoritma berubah). Bukan reset paksa tiap run -> resume tetap bisa jalan.
+    status = config.refresh_artifacts_if_stale()
+
     print("=== Fase 1: prepare data & scaffold split ===")
     for dataset in config.DATASETS:
-        # force=True: selalu regenerasi split bersih di Fase 1 (algoritma splitter
-        # deterministik yang baru), agar cache split lama tidak terpakai (perbaikan K1).
-        ds = data_loader.build_split(dataset, save=True, force=True)
+        # Reuse split kalau masih ada (versi fresh); regenerasi hanya bila hilang (habis
+        # dibersihkan karena basi). Determinisme splitter menjamin hasil identik.
+        ds = data_loader.build_split(dataset, save=True)
         n_tr, n_va, n_te = ds.n("train"), ds.n("val"), ds.n("test")
         total = n_tr + n_va + n_te
 
