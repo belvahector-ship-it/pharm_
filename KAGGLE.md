@@ -27,13 +27,15 @@ tok = UserSecretsClient().get_secret("GH_TOKEN")
 ## 2. Install dependency
 ```python
 # Cell 2 — install (Kaggle sudah punya torch; sisanya dari requirements)
-!pip install -q rdkit deepchem chemprop transformers
+!pip install -q rdkit deepchem "chemprop>=2.1,<3.0" transformers
 # atau: !pip install -q -r requirements.txt
 ```
 Catatan versi:
-- `requirements.txt` mem-pin **chemprop 1.7.1** (CLI `python -m chemprop.train` yang dipakai
-  `dmpnn_model.py`). Kalau Kaggle memasang **chemprop 2.x**, CLI-nya berubah — beri tahu saya
-  untuk menyesuaikan wrapper, atau paksa versi: `!pip install -q "chemprop==1.7.1"`.
+- **Chemprop 1.x TIDAK tersedia untuk Python modern** (rilis 1.x terakhir, 1.6.1, mensyaratkan
+  Python <3.9 — Kaggle memakai Python lebih baru). Karena itu `requirements.txt` & wrapper
+  `src/models/dmpnn_model.py` memakai **chemprop 2.x**, dengan CLI entrypoint `chemprop train`
+  / `chemprop predict` (bukan `python -m chemprop.train` gaya v1). Referensi CLI resmi:
+  https://chemprop.readthedocs.io/en/latest/cmd.html
 - Jangan paksa versi `torch` di Kaggle (biarkan bawaan Kaggle agar cocok dengan CUDA-nya).
 
 ## 3. Jalankan pipeline
@@ -82,7 +84,8 @@ Hasil:
 ## Masalah umum
 | Gejala | Sebab & solusi |
 |---|---|
-| `chemprop.train` error argumen | Kaggle pasang chemprop 2.x → `pip install "chemprop==1.7.1"` |
+| `ERROR: No matching distribution found for chemprop==1.7.1` | Chemprop 1.x tak ada utk Python modern → pakai `pip install "chemprop>=2.1,<3.0"` (sudah default di requirements.txt & notebook) |
+| Chemprop error argumen CLI (`--data_path` dst tak dikenal) | Itu sintaks chemprop 1.x (underscore). Chemprop 2.x pakai dash: `--data-path`, `chemprop train`/`chemprop predict` sbg entrypoint. Pastikan versi terpasang `>=2.1` (`python -c "import chemprop; print(chemprop.__version__)"`). |
 | Checkpoint HuggingFace gagal diunduh | Internet Notebook belum `On` |
 | Hanya 1 GPU terpakai | Accelerator belum `GPU T4 x2`; cek `import torch; torch.cuda.device_count()` harus 2 |
 | Dataset MoleculeNet gagal load | DeepChem butuh Internet `On`; atau taruh CSV di `data/raw/{dataset}.csv` sesuai `DATASET_SCHEMA` |

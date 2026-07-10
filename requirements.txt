@@ -1,7 +1,8 @@
 # requirements.txt — versi di-PIN (Audit R1#8 / R2 versioning).
-# Ditujukan untuk Kaggle Notebook (Python 3.10/3.11, 2x GPU T4).
-# Catatan: chemprop 2.x mengubah API; blueprint memakai chemprop 1.x (CLI/Python API
-# yang stabil untuk dataset kecil). Sesuaikan bila Kaggle menyediakan versi berbeda.
+# Ditujukan untuk Kaggle Notebook (Python 3.10/3.11+, 2x GPU T4).
+# Catatan chemprop: versi 1.x (mis. 1.7.1) TIDAK tersedia untuk Python modern — rilis 1.x
+# terakhir (1.6.1) mensyaratkan Python <3.9. src/models/dmpnn_model.py memanggil CLI
+# `chemprop train` / `chemprop predict` (chemprop 2.x, https://chemprop.readthedocs.io).
 
 numpy==1.26.4
 pandas==2.2.2
@@ -16,7 +17,7 @@ tokenizers==0.19.1
 # Chemistry
 rdkit==2023.9.6
 deepchem==2.8.0
-chemprop==1.7.1
+chemprop>=2.1,<3.0
 
 # Utilities
 tqdm==4.66.4

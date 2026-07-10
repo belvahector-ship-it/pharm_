@@ -1,17 +1,22 @@
-"""dmpnn_model.py — Wrapper D-MPNN (Chemprop), multi-task native.
+"""dmpnn_model.py — Wrapper D-MPNN (Chemprop v2.x), multi-task native.
 
-Strategi: memanggil Chemprop lewat CLI subprocess (chemprop_train / chemprop_predict),
-menulis train/val CSV sementara. Ini stabil lintas versi & sesuai blueprint
-("subprocess/CLI atau python API").
+Strategi: memanggil Chemprop lewat CLI subprocess (`chemprop train` / `chemprop predict`,
+entrypoint console script bawaan chemprop 2.x — BUKAN `python -m chemprop.train` yang
+dipakai chemprop 1.x). Chemprop 1.x tidak lagi tersedia untuk Python modern (Kaggle) —
+rilis 1.x terakhir (1.6.1) mensyaratkan Python <3.9 — sehingga wrapper ini ditargetkan
+ke chemprop 2.x. Referensi CLI: https://chemprop.readthedocs.io/en/latest/cmd.html
 
 Keputusan audit:
-- Audit R1#3  : class imbalance -> `--class_balance` (weighted sampling Chemprop).
-- Audit R2#10 : TANPA `--features_generator rdkit_2d_normalized` (pure graph).
-- Audit R2#11 : early stopping — Chemprop menyimpan model terbaik berdasar val metric;
-                `--epochs` di-set dari config, best-on-val dipakai untuk predict.
-- Bagian 4c   : checkpoint & resume — Chemprop menyimpan checkpoint di save_dir; bila
-                folder run sudah berisi model.pt & config, training di-skip (resume/pakai ulang).
-- gpu_id      : dipilih via CUDA_VISIBLE_DEVICES (proses terpisah dari ChemBERTa).
+- Audit R1#3  : class imbalance -> `--class-balance` (tiap batch train seimbang pos/neg).
+- Audit R2#10 : TANPA fitur tambahan (pure graph) — tidak menambah flag featurizer 2D.
+- Audit R2#11 : early stopping -> `--patience 5` berbasis val_loss (`--tracking-metric`
+                default val_loss), Chemprop otomatis menyimpan bobot TERBAIK ke
+                `{output_dir}/model_0/best.pt` (dipakai predict, bukan bobot epoch terakhir).
+- Bagian 4c   : checkpoint & resume — bila `model_0/best.pt` sudah ada, training di-skip
+                (coarse resume level-artefak; Chemprop CLI v2 tidak mengekspos resume
+                per-epoch sederhana seperti v1, jadi granularitasnya di level run/model).
+- gpu_id      : dipilih via CUDA_VISIBLE_DEVICES (proses terpisah, paralel dgn ChemBERTa)
+                + `--accelerator gpu --devices "0"` (index 0 relatif setelah env di-mask).
 
 predict_proba(smiles) -> (N, n_tasks) prob kelas positif.
 """
@@ -19,7 +24,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import tempfile
 
 import numpy as np
@@ -50,11 +54,25 @@ class DMPNNModel(BaseMolModel):
                 data[col] = y[:, t]
         pd.DataFrame(data).to_csv(path, index=False)
 
+    def _has_gpu(self):
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            return False
+
     def _env(self):
         env = os.environ.copy()
-        # Bagian 4c: D-MPNN di GPU config.DMPNN["gpu_id"] (paralel dgn ChemBERTa di GPU lain).
-        env["CUDA_VISIBLE_DEVICES"] = str(self.cfg["gpu_id"])
+        if self._has_gpu():
+            # Bagian 4c: D-MPNN di GPU config.DMPNN["gpu_id"] (paralel dgn ChemBERTa di GPU lain).
+            env["CUDA_VISIBLE_DEVICES"] = str(self.cfg["gpu_id"])
         return env
+
+    def _accel_flags(self):
+        # Setelah CUDA_VISIBLE_DEVICES di-mask ke 1 GPU, device yang terlihat selalu index 0.
+        if self._has_gpu():
+            return ["--accelerator", "gpu", "--devices", "1"]
+        return ["--accelerator", "cpu"]
 
     def _run(self, args):
         proc = subprocess.run(args, env=self._env(), capture_output=True, text=True)
@@ -64,9 +82,12 @@ class DMPNNModel(BaseMolModel):
                 f"STDOUT:\n{proc.stdout[-2000:]}\nSTDERR:\n{proc.stderr[-2000:]}")
         return proc
 
+    def _model_path(self):
+        return os.path.join(self.save_dir, "model_0", "best.pt")
+
     # ---------------- fit ----------------
     def fit(self, train_smiles, train_labels, val_smiles=None, val_labels=None):
-        model_file = os.path.join(self.save_dir, "fold_0", "model_0", "model.pt")
+        model_file = self._model_path()
         if config.CHECKPOINT["resume_if_exists"] and os.path.exists(model_file):
             print(f"[dmpnn] pakai ulang model tersimpan: {model_file}")
             return self
@@ -74,36 +95,40 @@ class DMPNNModel(BaseMolModel):
         os.makedirs(self.save_dir, exist_ok=True)
         tmp = tempfile.mkdtemp(prefix="dmpnn_")
         train_csv = os.path.join(tmp, "train.csv")
-        val_csv = os.path.join(tmp, "val.csv")
         self._write_csv(train_smiles, train_labels, train_csv)
+
+        # --data-path menerima 1-3 file: [train] atau [train, val] atau [train, val, test].
+        # Kita berikan [train, val] -> val dipakai chemprop utk early stopping/model selection;
+        # test asli dievaluasi terpisah lewat predict_proba (tidak pernah dilihat saat fit).
+        data_paths = [train_csv]
         has_val = val_smiles is not None
         if has_val:
+            val_csv = os.path.join(tmp, "val.csv")
             self._write_csv(val_smiles, val_labels, val_csv)
+            data_paths.append(val_csv)
 
         args = [
-            sys.executable, "-m", "chemprop.train",   # entrypoint chemprop 1.x
-            "--data_path", train_csv,
-            "--dataset_type", "classification",
-            "--smiles_columns", "smiles",
-            "--target_columns", *self.tasks,
-            "--save_dir", self.save_dir,
-            "--hidden_size", str(self.cfg["hidden_size"]),
+            "chemprop", "train",
+            "--data-path", *data_paths,
+            "--task-type", "classification",
+            "--smiles-columns", "smiles",
+            "--target-columns", *self.tasks,
+            "--output-dir", self.save_dir,
+            "--message-hidden-dim", str(self.cfg["hidden_size"]),
             "--depth", str(self.cfg["depth"]),
             "--epochs", str(self.cfg["epochs"]),
-            "--batch_size", str(self.cfg["batch_size"]),
-            "--init_lr", str(self.cfg["lr"] / 10),
-            "--max_lr", str(self.cfg["lr"]),
-            "--final_lr", str(self.cfg["lr"] / 10),
-            "--seed", str(self.seed),
-            "--pytorch_seed", str(self.seed),
-            "--quiet",
+            "--batch-size", str(self.cfg["batch_size"]),
+            "--init-lr", str(self.cfg["lr"] / 10),
+            "--max-lr", str(self.cfg["lr"]),
+            "--final-lr", str(self.cfg["lr"] / 10),
+            "--data-seed", str(self.seed),
+            "--pytorch-seed", str(self.seed),
+            "--patience", str(self.cfg["early_stopping_patience"]),  # Audit R2#11
+            *self._accel_flags(),
         ]
         if config.CLASS_IMBALANCE[self.dataset]["balanced"]:
-            args.append("--class_balance")             # Audit R1#3
-        if has_val:
-            args += ["--separate_val_path", val_csv,
-                     "--separate_test_path", val_csv]   # test=val placeholder; test asli dipisah
-        # Audit R2#10: sengaja TIDAK menambah --features_generator.
+            args.append("--class-balance")             # Audit R1#3
+        # Audit R2#10: sengaja TIDAK menambah flag featurizer tambahan (pure graph).
 
         self._run(args)
         return self
@@ -116,11 +141,11 @@ class DMPNNModel(BaseMolModel):
         pd.DataFrame({"smiles": list(smiles)}).to_csv(in_csv, index=False)
 
         args = [
-            sys.executable, "-m", "chemprop.predict",
-            "--test_path", in_csv,
-            "--smiles_columns", "smiles",
-            "--checkpoint_dir", self.save_dir,
-            "--preds_path", out_csv,
+            "chemprop", "predict",
+            "--test-path", in_csv,
+            "--smiles-columns", "smiles",
+            "--model-paths", self._model_path(),
+            "--preds-path", out_csv,
         ]
         self._run(args)
 
