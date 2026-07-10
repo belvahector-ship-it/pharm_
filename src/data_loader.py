@@ -107,13 +107,16 @@ def _load_raw_dataframe(dataset: str) -> pd.DataFrame:
     csv_path = os.path.join(config.PATHS["raw_data"], f"{dataset}.csv")
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
-        missing = [c for c in [smiles_col] + label_cols if c not in df.columns]
-        if missing:
-            raise ValueError(
-                f"{csv_path} kekurangan kolom {missing}. Kolom tersedia: {list(df.columns)}. "
-                f"Perbarui DATASET_SCHEMA['{dataset}'] jika nama kolom raw berbeda.")
     else:
-        df = _load_via_deepchem(dataset, smiles_col, label_cols)
+        df = _download_raw_csv(dataset)
+        os.makedirs(config.PATHS["raw_data"], exist_ok=True)
+        df.to_csv(csv_path, index=False)  # cache -> reproducible & tidak download ulang
+
+    missing = [c for c in [smiles_col] + label_cols if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"{csv_path} kekurangan kolom {missing}. Kolom tersedia: {list(df.columns)}. "
+            f"Perbarui DATASET_SCHEMA['{dataset}'] jika nama kolom raw berbeda.")
 
     out = pd.DataFrame({"smiles": df[smiles_col].astype(str).values})
     for c in label_cols:
@@ -121,24 +124,24 @@ def _load_raw_dataframe(dataset: str) -> pd.DataFrame:
     return out
 
 
-def _load_via_deepchem(dataset: str, smiles_col: str, label_cols: list[str]) -> pd.DataFrame:
-    """Fallback: unduh via DeepChem MoleculeNet (featurizer='Raw', splitter tidak dipakai
-    karena kita buat scaffold split sendiri agar 3 jalur identik)."""
-    import deepchem as dc
-    loader = getattr(dc.molnet, config.DEEPCHEM_LOADERS[dataset])
-    # featurizer='Raw' -> X berisi RDKit Mol / SMILES; kita ambil ids (SMILES) saja.
-    tasks, datasets, _ = loader(featurizer="Raw", splitter=None)
-    ds = datasets[0]
-    smiles = [str(s) for s in ds.ids]
-    y = np.asarray(ds.y)
-    if y.ndim == 1:
-        y = y[:, None]
-    frame = {smiles_col: smiles}
-    for i, c in enumerate(label_cols):
-        # kolom label sesuai urutan task DeepChem
-        col_idx = i if i < y.shape[1] else 0
-        frame[c] = y[:, col_idx]
-    return pd.DataFrame(frame)
+# URL resmi CSV mentah MoleculeNet, sama persis yang dipakai internal DeepChem
+# (deepchem/molnet/load_function/{bbbp,bace,clintox}_datasets.py, dicek 2026-07).
+# Diunduh & di-parse LANGSUNG dengan pandas — sengaja TIDAK lewat dc.molnet.load_*(featurizer=...)
+# karena featurizer bawaan DeepChem (termasuk 'Raw') crash (ValueError: inhomogeneous shape)
+# saat ada SMILES invalid di raw data (mis. valensi N salah pada BBBP index 59, 61, dst) —
+# np.asarray(list_of_Mol_atau_None) gagal karena hasilnya ragged array. Baca CSV mentah
+# lalu biarkan validasi SMILES ditangani di jalur kita sendiri (Audit R1#5: skip & log).
+RAW_CSV_URLS = {
+    "bbbp":    "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/BBBP.csv",
+    "bace":    "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/bace.csv",
+    "clintox": "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/clintox.csv.gz",
+}
+
+
+def _download_raw_csv(dataset: str) -> pd.DataFrame:
+    """Unduh CSV mentah MoleculeNet langsung (pandas menangani .gz otomatis dari ekstensi URL)."""
+    url = RAW_CSV_URLS[dataset]
+    return pd.read_csv(url)
 
 
 # ---------------------------------------------------------------------------

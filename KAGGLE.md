@@ -6,7 +6,7 @@ Alur: kode di **GitHub** → `git clone` di **Kaggle Notebook (GPU T4 ×2)** →
 Di panel kanan notebook Kaggle:
 - **Accelerator** → `GPU T4 x2` (wajib, agar ChemBERTa & D-MPNN paralel di 2 GPU).
 - **Internet** → `On` (wajib: untuk clone GitHub, download checkpoint HuggingFace &
-  dataset MoleculeNet via DeepChem).
+  CSV mentah MoleculeNet dari S3 `deepchemdata`).
 
 ## 1. Clone repo
 ```python
@@ -27,7 +27,7 @@ tok = UserSecretsClient().get_secret("GH_TOKEN")
 ## 2. Install dependency
 ```python
 # Cell 2 — install (Kaggle sudah punya torch; sisanya dari requirements)
-!pip install -q rdkit deepchem "chemprop>=2.1,<3.0" transformers
+!pip install -q rdkit "chemprop>=2.1,<3.0" transformers
 # atau: !pip install -q -r requirements.txt
 ```
 Catatan versi:
@@ -36,6 +36,10 @@ Catatan versi:
   `src/models/dmpnn_model.py` memakai **chemprop 2.x**, dengan CLI entrypoint `chemprop train`
   / `chemprop predict` (bukan `python -m chemprop.train` gaya v1). Referensi CLI resmi:
   https://chemprop.readthedocs.io/en/latest/cmd.html
+- **`deepchem` TIDAK diperlukan** — `src/data_loader.py` mengunduh CSV mentah MoleculeNet
+  langsung dari S3 resmi DeepChem (URL sama yang dipakai `dc.molnet.load_*` secara internal),
+  lalu diproses murni dengan pandas+rdkit. Ini menghindari bug featurizer `Raw` DeepChem yang
+  crash (`ValueError: inhomogeneous shape`) ketika ada SMILES invalid di data mentah.
 - Jangan paksa versi `torch` di Kaggle (biarkan bawaan Kaggle agar cocok dengan CUDA-nya).
 
 ## 3. Jalankan pipeline
@@ -88,5 +92,6 @@ Hasil:
 | Chemprop error argumen CLI (`--data_path` dst tak dikenal) | Itu sintaks chemprop 1.x (underscore). Chemprop 2.x pakai dash: `--data-path`, `chemprop train`/`chemprop predict` sbg entrypoint. Pastikan versi terpasang `>=2.1` (`python -c "import chemprop; print(chemprop.__version__)"`). |
 | Checkpoint HuggingFace gagal diunduh | Internet Notebook belum `On` |
 | Hanya 1 GPU terpakai | Accelerator belum `GPU T4 x2`; cek `import torch; torch.cuda.device_count()` harus 2 |
-| Dataset MoleculeNet gagal load | DeepChem butuh Internet `On`; atau taruh CSV di `data/raw/{dataset}.csv` sesuai `DATASET_SCHEMA` |
+| `ValueError: setting an array element with a sequence... inhomogeneous shape` saat Fase 1 | Bug lama: featurizer `Raw` DeepChem crash pada SMILES invalid. Sudah diperbaiki — `data_loader.py` kini download CSV mentah langsung (tanpa DeepChem). Pastikan repo di Kaggle sudah `git pull`/re-clone versi terbaru. |
+| Dataset MoleculeNet gagal load | Butuh Internet `On` (download CSV dari S3); atau taruh CSV manual di `data/raw/{dataset}.csv` sesuai `DATASET_SCHEMA` |
 | Sel clone terlihat "macet" (running terus, tidak selesai) | Repo **private** & clone jalan tanpa token → git menunggu prompt `Username`/`Password` di terminal, yang tidak bisa dijawab dari sel notebook. **Solusi**: buat GH_TOKEN (langkah di §1) & simpan sebagai Secret Kaggle, lalu Stop sel yang macet dan Run ulang. `notebooks/kaggle_bootstrap.ipynb` versi terbaru sudah otomatis pakai `GH_TOKEN` bila ada, dan gagal cepat (bukan menggantung) bila tidak ada. |

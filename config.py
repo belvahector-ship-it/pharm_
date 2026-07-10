@@ -38,13 +38,6 @@ DATASET_SCHEMA = {
     "clintox": {"smiles_col": "smiles", "label_cols": ["FDA_APPROVED", "CT_TOX"]},  # multi-task
 }
 
-# DeepChem loader names (dipakai data_loader bila raw CSV tidak tersedia).
-DEEPCHEM_LOADERS = {
-    "bbbp":    "load_bbbp",
-    "bace":    "load_bace_classification",
-    "clintox": "load_clintox",
-}
-
 SPLIT = {
     "method": "scaffold",
     "ratios": (0.8, 0.1, 0.1),
