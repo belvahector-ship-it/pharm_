@@ -48,27 +48,32 @@ class ChemBERTaModel(BaseMolModel):
 
     # ---------------- model ----------------
     def _build_net(self):
-        import torch
+        import torch  # noqa: F401 (dipakai downstream & memastikan torch ter-load)
         import torch.nn as nn
         from transformers import AutoModel
 
-        encoder = AutoModel.from_pretrained(self.cfg["checkpoint"])
+        # (S3 — perbaikan audit, disempurnakan) Checkpoint DeepChem/ChemBERTa-77M-MTR adalah
+        # model Multi-Task-Regression yang TIDAK punya bobot pooler. Memuat AutoModel default
+        # membangun lapisan `pooler` yang di-inisialisasi ACAK (itulah `pooler.dense MISSING`
+        # di load report). Daripada memakai lapisan acak tsb, kita:
+        #   1) memuat encoder TANPA pooler (add_pooling_layer=False) -> tak ada bobot acak,
+        #      dan baris MISSING di load report hilang;
+        #   2) SELALU memakai hidden-state token pertama ([CLS]) sebagai representasi molekul.
+        # Ini adalah makna sebenarnya dari "CLS pooling" (Audit R1#4) untuk checkpoint headless:
+        # deterministik, standar literatur, dan tidak bergantung lapisan pooler pretrained yang
+        # memang tidak ada. Berlaku sama untuk mode fine-tune maupun freeze.
+        try:
+            encoder = AutoModel.from_pretrained(self.cfg["checkpoint"], add_pooling_layer=False)
+        except TypeError:
+            # arsitektur yang tak menerima kwarg tsb -> fallback, pooler diabaikan di forward.
+            encoder = AutoModel.from_pretrained(self.cfg["checkpoint"])
+
         if self.cfg["freeze_encoder"]:
             for p in encoder.parameters():
                 p.requires_grad = False
 
         hidden = encoder.config.hidden_size
         n_tasks = self.n_tasks
-        pooling = self.cfg["embedding_pooling"]
-        frozen = self.cfg["freeze_encoder"]
-
-        # (S3 — perbaikan audit) Checkpoint DeepChem/ChemBERTa-77M-MTR TIDAK membawa bobot
-        # pooler (load report: `pooler.dense.weight MISSING` -> di-inisialisasi ACAK). Saat
-        # fine-tune (freeze_encoder=False) itu aman karena pooler ikut terlatih. TAPI saat
-        # freeze_encoder=True, memakai pooler_output berarti embedding lewat lapisan acak yang
-        # BEKU -> sampah. Maka bila frozen, paksa pakai hidden state token pertama ([CLS])
-        # mentah, bukan pooler_output.
-        use_pooler = (pooling == "cls_token") and not frozen
 
         class Net(nn.Module):
             def __init__(self):
@@ -79,10 +84,7 @@ class ChemBERTaModel(BaseMolModel):
 
             def forward(self, input_ids, attention_mask):
                 out = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-                if use_pooler and getattr(out, "pooler_output", None) is not None:
-                    pooled = out.pooler_output            # Audit R1#4: [CLS]/pooler (fine-tune)
-                else:
-                    pooled = out.last_hidden_state[:, 0]  # token pertama ([CLS]) mentah
+                pooled = out.last_hidden_state[:, 0]   # [CLS] token (Audit R1#4)
                 return self.head(self.dropout(pooled))
 
         return Net().to(self._resolve_device())
@@ -146,6 +148,10 @@ class ChemBERTaModel(BaseMolModel):
         val_loader = (self._make_loader(val_smiles, val_labels, shuffle=False)
                       if val_smiles is not None else None)
 
+        # Catatan resume: setelah perubahan arsitektur (pooler dihapus), checkpoint LAMA
+        # (yang punya bobot pooler & head yang dilatih atas pooler_output) TIDAK kompatibel —
+        # load_state_dict strict akan error. Itu disengaja: jalankan RESET_ARTIFACTS=True sekali
+        # agar dilatih ulang bersih, bukan resume yang menghasilkan prediksi salah diam-diam.
         start_epoch = 0
         best_val = float("inf")
         no_improve = 0

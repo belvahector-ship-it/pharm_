@@ -27,10 +27,21 @@ def silence_noisy_libs() -> None:
     import os
     os.environ.setdefault("WANDB_MODE", "disabled")
     os.environ.setdefault("WANDB_SILENT", "true")
+    # HF: sembunyikan "LOAD REPORT" (UNEXPECTED/MISSING keys) yang muncul saat memuat
+    # checkpoint MTR ke arsitektur base. Itu informatif, bukan error (lihat penjelasan di
+    # chemberta_model._build_net). Set sebelum transformers dipakai.
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     try:
         from rdkit import RDLogger
         RDLogger.DisableLog("rdApp.*")
     except ImportError:
+        pass
+    try:
+        import transformers
+        transformers.logging.set_verbosity_error()
+    except Exception:
         pass
 
 
