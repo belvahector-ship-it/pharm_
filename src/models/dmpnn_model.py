@@ -38,6 +38,7 @@ import pandas as pd
 
 import config
 from src.models.base_model import BaseMolModel
+from src.utils import io
 
 
 class DMPNNModel(BaseMolModel):
@@ -50,16 +51,35 @@ class DMPNNModel(BaseMolModel):
             config.PATHS["checkpoints"], f"{self.name}_{self.dataset}_{self.seed}")
 
     # ---------------- helpers ----------------
-    def _write_csv(self, smiles, labels, path):
-        data = {"smiles": list(smiles)}
-        y = None
+    def _valid_mask(self, smiles_list, context):
+        """Audit R1#5: skip & log SMILES yang tak bisa di-parse RDKit, JANGAN crash.
+
+        Chemprop CLI v2 sendiri crash keras (RuntimeError) begitu ketemu 1 SMILES invalid
+        saat parsing internal-nya -- beda dari jalur RF/ChemBERTa yang toleran. Karena itu
+        kita WAJIB menyaring sebelum menulis CSV yang diserahkan ke `chemprop train/predict`.
+        """
+        from rdkit import Chem
+        mask = np.zeros((len(smiles_list),), dtype=bool)
+        for i, smi in enumerate(smiles_list):
+            if Chem.MolFromSmiles(smi) is None:
+                io.log_invalid_smiles(smi, f"dmpnn:{self.dataset}:{context}:{i}")
+            else:
+                mask[i] = True
+        return mask
+
+    def _write_csv(self, smiles, labels, path, context):
+        mask = self._valid_mask(smiles, context)
+        smiles = [s for s, ok in zip(smiles, mask) if ok]
+        data = {"smiles": smiles}
         if labels is not None:
             y = np.asarray(labels, dtype=np.float32)
             if y.ndim == 1:
                 y = y[:, None]
+            y = y[mask]
             for t, col in enumerate(self.tasks):
                 data[col] = y[:, t]
         pd.DataFrame(data).to_csv(path, index=False)
+        return mask
 
     def _has_gpu(self):
         try:
@@ -102,7 +122,7 @@ class DMPNNModel(BaseMolModel):
         os.makedirs(self.save_dir, exist_ok=True)
         tmp = tempfile.mkdtemp(prefix="dmpnn_")
         train_csv = os.path.join(tmp, "train.csv")
-        self._write_csv(train_smiles, train_labels, train_csv)
+        self._write_csv(train_smiles, train_labels, train_csv, context="fit_train")
 
         # --data-path menerima 1-3 file, TAPI semantik chemprop v2 saat 2 file adalah
         # [train, TEST] (bukan [train, val]!) -- lihat validate_train_args di chemprop/cli/train.py.
@@ -115,7 +135,7 @@ class DMPNNModel(BaseMolModel):
         has_val = val_smiles is not None
         if has_val:
             val_csv = os.path.join(tmp, "val.csv")
-            self._write_csv(val_smiles, val_labels, val_csv)
+            self._write_csv(val_smiles, val_labels, val_csv, context="fit_val")
             data_paths.append(val_csv)   # val eksplisit (dipakai early stopping/model selection)
             data_paths.append(val_csv)   # placeholder "test" chemprop -- diabaikan, tes asli terpisah
 
@@ -147,10 +167,19 @@ class DMPNNModel(BaseMolModel):
 
     # ---------------- predict ----------------
     def predict_proba(self, smiles):
+        smiles = list(smiles)
+        n = len(smiles)
+        out = np.full((n, self.n_tasks), 0.5, dtype=np.float32)  # prior default (Audit R1#5)
+
+        mask = self._valid_mask(smiles, context="predict")
+        valid_idx = np.where(mask)[0]
+        if len(valid_idx) == 0:
+            return out  # semua SMILES invalid -> kembalikan prior saja
+
         tmp = tempfile.mkdtemp(prefix="dmpnn_pred_")
         in_csv = os.path.join(tmp, "in.csv")
         out_csv = os.path.join(tmp, "out.csv")
-        pd.DataFrame({"smiles": list(smiles)}).to_csv(in_csv, index=False)
+        pd.DataFrame({"smiles": [smiles[i] for i in valid_idx]}).to_csv(in_csv, index=False)
 
         args = [
             "chemprop", "predict",
@@ -167,6 +196,7 @@ class DMPNNModel(BaseMolModel):
         preds = df[cols].to_numpy(dtype=np.float32)
         if preds.ndim == 1:
             preds = preds[:, None]
-        # Chemprop mungkin mengeluarkan 'Invalid SMILES' -> NaN; isi prior 0.5 (Audit R1#5).
-        preds = np.nan_to_num(preds, nan=0.5)
-        return preds
+        preds = np.nan_to_num(preds, nan=0.5)  # jaga-jaga NaN sisa dari chemprop
+
+        out[valid_idx] = preds
+        return out
