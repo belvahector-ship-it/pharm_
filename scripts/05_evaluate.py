@@ -137,8 +137,12 @@ def main():
     df.to_csv(out_csv, index=False)
     io.save_json(all_sig, os.path.join(config.PATHS["results"], "significance.json"))
 
+    # S2: rekam versi environment AKTUAL untuk lampiran/reproducibility paper.
+    env_path = io.capture_environment()
+
     print(f"\nTabel hasil -> {out_csv}")
     print("Ringkasan signifikansi -> outputs/results/significance.json")
+    print(f"Versi environment -> {env_path}")
     print("FASE 7 OK")
 
 

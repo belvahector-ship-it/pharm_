@@ -60,6 +60,15 @@ class ChemBERTaModel(BaseMolModel):
         hidden = encoder.config.hidden_size
         n_tasks = self.n_tasks
         pooling = self.cfg["embedding_pooling"]
+        frozen = self.cfg["freeze_encoder"]
+
+        # (S3 — perbaikan audit) Checkpoint DeepChem/ChemBERTa-77M-MTR TIDAK membawa bobot
+        # pooler (load report: `pooler.dense.weight MISSING` -> di-inisialisasi ACAK). Saat
+        # fine-tune (freeze_encoder=False) itu aman karena pooler ikut terlatih. TAPI saat
+        # freeze_encoder=True, memakai pooler_output berarti embedding lewat lapisan acak yang
+        # BEKU -> sampah. Maka bila frozen, paksa pakai hidden state token pertama ([CLS])
+        # mentah, bukan pooler_output.
+        use_pooler = (pooling == "cls_token") and not frozen
 
         class Net(nn.Module):
             def __init__(self):
@@ -70,10 +79,10 @@ class ChemBERTaModel(BaseMolModel):
 
             def forward(self, input_ids, attention_mask):
                 out = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-                if pooling == "cls_token" and getattr(out, "pooler_output", None) is not None:
-                    pooled = out.pooler_output            # Audit R1#4: [CLS]/pooler
+                if use_pooler and getattr(out, "pooler_output", None) is not None:
+                    pooled = out.pooler_output            # Audit R1#4: [CLS]/pooler (fine-tune)
                 else:
-                    pooled = out.last_hidden_state[:, 0]  # fallback: token pertama ([CLS])
+                    pooled = out.last_hidden_state[:, 0]  # token pertama ([CLS]) mentah
                 return self.head(self.dropout(pooled))
 
         return Net().to(self._resolve_device())

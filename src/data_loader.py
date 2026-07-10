@@ -52,45 +52,61 @@ def _bemis_murcko_scaffold(smiles: str, include_chirality: bool = False) -> Opti
     return scaffold
 
 
-def scaffold_split_indices(smiles_list: list[str], ratios=(0.8, 0.1, 0.1),
-                           seed: int = 0) -> dict[str, list[int]]:
-    """Deterministik scaffold split.
+def generate_scaffold_groups(smiles_list: list[str]) -> "dict[str, list[int]]":
+    """Kelompokkan indeks molekul per scaffold Bemis-Murcko, urutan kemunculan.
 
-    Kelompokkan molekul per scaffold Bemis-Murcko, urutkan grup dari besar ke kecil
-    (standar DeepChem/Chemprop), lalu isi train hingga penuh, lalu val, lalu test.
-    Grup scaffold TIDAK PERNAH terpecah antar split -> tidak ada kebocoran scaffold
-    (Bagian 1 tabel verifikasi: "scaffold split tidak overlap antar split").
+    (K1) Molekul tak-terparse SEHARUSNYA sudah dibuang di build_split (R1). Kalau toh
+    lolos ke sini, tiap satu diberi KEY UNIK (bukan dilumpuk ke satu grup "") agar tidak
+    membentuk grup buatan besar yang mengacaukan pengurutan.
     """
-    n_total = len(smiles_list)
-    n_train = int(np.floor(ratios[0] * n_total))
-    n_val = int(np.floor(ratios[1] * n_total))
-
     scaffold_to_idx: dict[str, list[int]] = defaultdict(list)
     for idx, smi in enumerate(smiles_list):
         scaf = _bemis_murcko_scaffold(smi)
         if scaf is None:
             io.log_invalid_smiles(smi, f"scaffold_split:{idx}")
-            scaf = ""  # molekul tak terparse -> scaffold kosong (dikelompokkan bersama)
+            scaf = f"__invalid_{idx}__"  # key unik, bukan dilumpuk
         scaffold_to_idx[scaf].append(idx)
+    return scaffold_to_idx
 
-    # Urutkan grup: besar dulu (deterministik; seed hanya mengacak tie-break stabil)
-    rng = np.random.RandomState(seed)
-    groups = list(scaffold_to_idx.values())
-    # tie-break stabil + sedikit shuffle terkontrol seed pada grup berukuran sama
-    order = sorted(range(len(groups)),
-                   key=lambda i: (-len(groups[i]), rng.rand()))
-    groups = [groups[i] for i in order]
+
+def scaffold_split_indices(smiles_list: list[str], ratios=(0.8, 0.1, 0.1),
+                           seed: int = 0) -> dict[str, list[int]]:
+    """Scaffold split DETERMINISTIK (algoritma DeepChem ScaffoldSplitter).
+
+    (K1 — perbaikan audit) Versi lama memakai `rng.rand()` sebagai tie-break antar grup
+    berukuran sama. Untuk dataset yang didominasi scaffold singleton (mis. BBBP), itu
+    MENGACAK mayoritas molekul -> "scaffold split" merosot menjadi praktis RANDOM split,
+    sehingga ROC-AUC jauh di atas literatur (BBBP ~0.96 vs ~0.72). Sekarang grup diurutkan
+    (ukuran, indeks-pertama) menurun secara DETERMINISTIK — persis DeepChem — tanpa
+    keacakan, sehingga hasil comparable ke benchmark MoleculeNet & split-nya benar-benar
+    memisahkan scaffold.
+
+    Parameter `seed` DIPERTAHANKAN di signature demi kompatibilitas config, tapi TIDAK lagi
+    memengaruhi hasil (split scaffold bersifat deterministik by design).
+
+    Grup scaffold tidak pernah terpecah antar split -> tidak ada kebocoran scaffold.
+    """
+    n_total = len(smiles_list)
+    train_cutoff = ratios[0] * n_total
+    val_cutoff = (ratios[0] + ratios[1]) * n_total
+
+    scaffold_to_idx = generate_scaffold_groups(smiles_list)
+
+    # Urutan DeepChem: (ukuran grup, indeks pertama) menurun — deterministik, tanpa RNG.
+    scaffold_sets = [idxs for _, idxs in sorted(
+        scaffold_to_idx.items(), key=lambda kv: (len(kv[1]), kv[1][0]), reverse=True)]
 
     train_idx: list[int] = []
     val_idx: list[int] = []
     test_idx: list[int] = []
-    for group in groups:
-        if len(train_idx) + len(group) <= n_train:
-            train_idx += group
-        elif len(val_idx) + len(group) <= n_val:
-            val_idx += group
+    for group in scaffold_sets:
+        if len(train_idx) + len(group) > train_cutoff:
+            if len(train_idx) + len(val_idx) + len(group) > val_cutoff:
+                test_idx += group
+            else:
+                val_idx += group
         else:
-            test_idx += group
+            train_idx += group
 
     return {"train": sorted(train_idx), "val": sorted(val_idx), "test": sorted(test_idx)}
 
@@ -144,22 +160,50 @@ def _download_raw_csv(dataset: str) -> pd.DataFrame:
     return pd.read_csv(url)
 
 
+def _drop_invalid_smiles(df: pd.DataFrame, dataset: str) -> pd.DataFrame:
+    """(R1) Buang baris dgn SMILES tak-terparse RDKit; log tiap yang dibuang (Audit R1#5)."""
+    from rdkit import Chem
+    keep = []
+    n_drop = 0
+    for smi in df["smiles"].astype(str):
+        ok = Chem.MolFromSmiles(smi) is not None
+        keep.append(ok)
+        if not ok:
+            io.log_invalid_smiles(smi, f"load:{dataset}")
+            n_drop += 1
+    if n_drop:
+        print(f"  [{dataset}] {n_drop} SMILES invalid dibuang saat load "
+              f"(dari {len(df)} -> {len(df) - n_drop}). Dicatat di invalid_smiles.txt.")
+    return df[keep].reset_index(drop=True)
+
+
 # ---------------------------------------------------------------------------
 # API utama
 # ---------------------------------------------------------------------------
-def build_split(dataset: str, save: bool = True) -> DatasetSplit:
+def build_split(dataset: str, save: bool = True, force: bool = False) -> DatasetSplit:
     """Bangun (atau muat) scaffold split untuk satu dataset.
 
-    Bila file split sudah ada di data/splits/, indeksnya dipakai ulang persis (fixed).
+    Bila file split sudah ada di data/splits/, indeksnya dipakai ulang persis (fixed) —
+    KECUALI `force=True` (dipakai 01_prepare_data untuk regenerasi bersih, mis. setelah
+    algoritma splitter berubah). Script hilir (02-05) memanggil tanpa force -> reuse split
+    yang sama persis di 3 jalur representasi.
     """
     schema = config.DATASET_SCHEMA[dataset]
     label_cols = schema["label_cols"]
     df = _load_raw_dataframe(dataset)
+
+    # (R1 — perbaikan audit) Buang molekul yang tak bisa di-parse RDKit SEKARANG, sebelum
+    # split. Sebelumnya SMILES invalid tetap masuk split (diberi scaffold ""), sehingga:
+    # (a) count split memasukkan molekul tak-terpakai, (b) semua invalid dilumpuk ke satu
+    # "scaffold" & jatuh ke satu split, (c) dapat prediksi prior 0.5 yang menggeser metrik.
+    # Membuangnya di sini membuat split bersih & count akurat untuk SEMUA jalur model.
+    df = _drop_invalid_smiles(df, dataset)
+
     smiles_all = df["smiles"].tolist()
     labels_all = df[label_cols].to_numpy(dtype=np.float32)  # (N, T), NaN = missing label
 
     split_file = os.path.join(config.PATHS["splits"], f"{dataset}_split.json")
-    if os.path.exists(split_file):
+    if os.path.exists(split_file) and not force:
         idx = io.load_json(split_file)
     else:
         idx = scaffold_split_indices(

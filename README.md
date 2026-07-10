@@ -35,6 +35,7 @@ outputs/                  # predictions / results / figures / checkpoints / logs
 ```bash
 # Fase 1 — data & scaffold split (fixed, dipakai semua model)
 python scripts/01_prepare_data.py
+python scripts/00_diagnose_split.py      # (audit K1/K2) cek mutu split: overlap scaffold HARUS 0
 
 # Fase 4 — training baselines (3 proses PARALEL agar GPU tidak idle)
 python scripts/02_train_baselines.py --model chemberta   # GPU 0
@@ -60,8 +61,20 @@ python scripts/06_make_plots.py          # opsional (calibration), ditunda
 ```bash
 python tests/verify_phase0.py      # config/seed/io (butuh: numpy)
 python tests/verify_numpy_only.py  # matematika fusion/eval (butuh: numpy)
+python tests/verify_splitter.py    # scaffold split deterministik/anti-bocor K1 (butuh: numpy)
 python tests/verify_wiring.py      # end-to-end Fase 4->6->7 sintetis (butuh: numpy, sklearn, scipy)
 ```
+
+## Perbaikan audit (lihat riwayat commit)
+- **K1** scaffold splitter deterministik (algoritma DeepChem) — sebelumnya `rng.rand()` membuat
+  split BBBP mendekati random (AUC ~0.96 vs literatur ~0.72).
+- **K2** verifikasi & diagnostik overlap **scaffold** (bukan cuma SMILES): `00_diagnose_split.py`.
+- **K3** TTA memperburuk ChemBERTa pada trial n=1 — perlu full 5-seed untuk menyimpulkan
+  (bisa jadi efek nyata SMILES out-of-distribution, bukan bug).
+- **R1** SMILES invalid dibuang saat load (bukan dilumpuk scaffold `""`).
+- **S1** enumerasi TTA reproducible via `MolToRandomSmilesVect(randomSeed=…)` (Audit R2#7).
+- **S2** versi environment aktual direkam ke `outputs/results/environment.txt`.
+- **S3** pooler ChemBERTa fallback ke CLS mentah saat `freeze_encoder=True`.
 
 Untuk verifikasi penuh Fase 2/3 (fingerprint, tokenizer, graph, model training) diperlukan
 `rdkit`, `torch`, `transformers`, `chemprop` — dijalankan di Kaggle. Lihat kolom

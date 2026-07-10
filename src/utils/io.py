@@ -86,6 +86,35 @@ def load_json(path: str) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Rekam versi environment aktual (S2 — reproducibility, Audit R1#8)
+# ---------------------------------------------------------------------------
+def capture_environment(path: str | None = None) -> str:
+    """Tulis versi Python + paket kunci yang BENAR-BENAR terpasang ke file teks.
+
+    Pin di requirements.txt sering diabaikan di Kaggle (versi bawaan image dipakai). Untuk
+    klaim reproducibility paper, versi AKTUAL saat run inilah yang harus dilampirkan.
+    """
+    import platform
+    from importlib import metadata
+
+    config.ensure_dirs()
+    if path is None:
+        path = os.path.join(config.PATHS["results"], "environment.txt")
+
+    pkgs = ["numpy", "pandas", "scipy", "scikit-learn", "torch",
+            "transformers", "tokenizers", "rdkit", "chemprop"]
+    lines = [f"python: {platform.python_version()} ({platform.platform()})"]
+    for p in pkgs:
+        try:
+            lines.append(f"{p}: {metadata.version(p)}")
+        except metadata.PackageNotFoundError:
+            lines.append(f"{p}: (tidak terpasang)")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
+# ---------------------------------------------------------------------------
 # Log SMILES invalid (Audit R1#5)
 # ---------------------------------------------------------------------------
 def log_invalid_smiles(smiles: str, context: str) -> None:
