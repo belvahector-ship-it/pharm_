@@ -162,8 +162,13 @@ class DMPNNModel(BaseMolModel):
             "--patience", str(self.cfg["early_stopping_patience"]),  # Audit R2#11
             *self._accel_flags(),
         ]
-        if config.CLASS_IMBALANCE[self.dataset]["balanced"]:
-            args.append("--class-balance")             # Audit R1#3
+        # Audit R1#3: class balance. TAPI `--class-balance` chemprop v2 hanya sah untuk
+        # klasifikasi SINGLE-TASK (sampler menyeimbangkan pos/neg berdasar SATU kolom target).
+        # Untuk multi-task (ClinTox: FDA_APPROVED + CT_TOX) chemprop GAGAL (rc=1) — inilah
+        # penyebab D-MPNN sukses di bbbp/bace tapi crash di clintox. Maka aktifkan hanya bila
+        # single-task; untuk multi-task, D-MPNN dilatih tanpa class-balance (keterbatasan dicatat).
+        if config.CLASS_IMBALANCE[self.dataset]["balanced"] and len(self.tasks) == 1:
+            args.append("--class-balance")
         # Audit R2#10: sengaja TIDAK menambah flag featurizer tambahan (pure graph).
 
         self._run(args, log_name=f"dmpnn_train_{self.dataset}_{self.seed}")
