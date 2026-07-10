@@ -1,0 +1,25 @@
+# requirements.txt — versi di-PIN (Audit R1#8 / R2 versioning).
+# Ditujukan untuk Kaggle Notebook (Python 3.10/3.11, 2x GPU T4).
+# Catatan: chemprop 2.x mengubah API; blueprint memakai chemprop 1.x (CLI/Python API
+# yang stabil untuk dataset kecil). Sesuaikan bila Kaggle menyediakan versi berbeda.
+
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+scikit-learn==1.4.2
+
+# Deep learning stack
+torch==2.2.1
+transformers==4.40.2
+tokenizers==0.19.1
+
+# Chemistry
+rdkit==2023.9.6
+deepchem==2.8.0
+chemprop==1.7.1
+
+# Utilities
+tqdm==4.66.4
+matplotlib==3.8.4        # untuk 06_make_plots.py (opsional)
+
+# Python: 3.10.x (Kaggle default). Dicantumkan di Metodologi/Lampiran paper.

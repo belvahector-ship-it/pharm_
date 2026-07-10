@@ -1,0 +1,34 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# --- Data mentah & hasil (JANGAN di-commit; digenerate ulang di Kaggle) ---
+data/raw/*
+!data/raw/.gitkeep
+data/splits/*
+!data/splits/.gitkeep
+
+outputs/predictions/*
+outputs/results/*
+outputs/figures/*
+outputs/checkpoints/*
+outputs/logs/*
+# pertahankan struktur folder-nya saja
+!outputs/**/.gitkeep
+
+# --- Model / artefak besar ---
+*.pt
+*.ckpt
+*.npy
+*.pkl
+*.h5
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
