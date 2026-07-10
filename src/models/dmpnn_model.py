@@ -18,6 +18,13 @@ Keputusan audit:
 - gpu_id      : dipilih via CUDA_VISIBLE_DEVICES (proses terpisah, paralel dgn ChemBERTa)
                 + `--accelerator gpu --devices "0"` (index 0 relatif setelah env di-mask).
 
+Catatan penting `--data-path` (sumber bug awal): chemprop v2 menafsirkan JUMLAH file yang
+diberikan berbeda dari dugaan intuitif — 1 file = auto train/val/test split; 2 file =
+[train, TEST] (BUKAN [train, val]!); 3 file = [train, val, test] apa adanya tanpa split
+internal. Karena kita perlu val eksplisit tanpa memicu chemprop mem-split ulang train, fit()
+selalu mengirim 3 file [train, val, val] (val diduplikasi jadi placeholder "test" — diabaikan,
+evaluasi test asli dilakukan terpisah lewat predict_proba(), tidak pernah bocor ke training).
+
 predict_proba(smiles) -> (N, n_tasks) prob kelas positif.
 """
 from __future__ import annotations
@@ -97,15 +104,20 @@ class DMPNNModel(BaseMolModel):
         train_csv = os.path.join(tmp, "train.csv")
         self._write_csv(train_smiles, train_labels, train_csv)
 
-        # --data-path menerima 1-3 file: [train] atau [train, val] atau [train, val, test].
-        # Kita berikan [train, val] -> val dipakai chemprop utk early stopping/model selection;
-        # test asli dievaluasi terpisah lewat predict_proba (tidak pernah dilihat saat fit).
+        # --data-path menerima 1-3 file, TAPI semantik chemprop v2 saat 2 file adalah
+        # [train, TEST] (bukan [train, val]!) -- lihat validate_train_args di chemprop/cli/train.py.
+        # Untuk mendapat val eksplisit tanpa memicu chemprop mem-split ulang train secara
+        # internal, kita WAJIB kasih 3 file: [train, val, test]. Karena test asli kita
+        # dievaluasi terpisah lewat predict_proba() (tidak pernah dilihat saat fit -- no
+        # leakage), file ke-3 di sini cuma placeholder (duplikat val) supaya chemprop
+        # tidak melakukan auto-split; hasil evaluasi chemprop di partisi ke-3 itu diabaikan.
         data_paths = [train_csv]
         has_val = val_smiles is not None
         if has_val:
             val_csv = os.path.join(tmp, "val.csv")
             self._write_csv(val_smiles, val_labels, val_csv)
-            data_paths.append(val_csv)
+            data_paths.append(val_csv)   # val eksplisit (dipakai early stopping/model selection)
+            data_paths.append(val_csv)   # placeholder "test" chemprop -- diabaikan, tes asli terpisah
 
         args = [
             "chemprop", "train",
