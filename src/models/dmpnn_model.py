@@ -91,14 +91,19 @@ class DMPNNModel(BaseMolModel):
     def _env(self):
         env = os.environ.copy()
         if self._has_gpu():
-            # Bagian 4c: D-MPNN di GPU config.DMPNN["gpu_id"] (paralel dgn ChemBERTa di GPU lain).
+            # Bagian 4c: D-MPNN dipin ke GPU config.DMPNN["gpu_id"] (paralel dgn ChemBERTa di
+            # GPU lain) lewat CUDA_VISIBLE_DEVICES. Setelah di-mask, hanya SATU GPU yang terlihat
+            # (physical gpu_id -> logical index 0).
             env["CUDA_VISIBLE_DEVICES"] = str(self.cfg["gpu_id"])
         return env
 
     def _accel_flags(self):
-        # Setelah CUDA_VISIBLE_DEVICES di-mask ke 1 GPU, device yang terlihat selalu index 0.
+        # BUGFIX GPU: karena CUDA_VISIBLE_DEVICES sudah memilih GPU (hanya 1 yang terlihat),
+        # JANGAN kirim `--devices 1` (itu berarti "pakai index 1" yang TIDAK ADA -> Lightning
+        # hang/crash). Cukup `--accelerator gpu` dan biarkan `--devices` default 'auto' memakai
+        # satu-satunya GPU yang terlihat. Ini menghapus ambiguitas count-vs-index sepenuhnya.
         if self._has_gpu():
-            return ["--accelerator", "gpu", "--devices", "1"]
+            return ["--accelerator", "gpu"]
         return ["--accelerator", "cpu"]
 
     def _run(self, args):
