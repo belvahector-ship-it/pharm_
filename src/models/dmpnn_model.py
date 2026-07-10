@@ -18,12 +18,11 @@ Keputusan audit:
 - gpu_id      : dipilih via CUDA_VISIBLE_DEVICES (proses terpisah, paralel dgn ChemBERTa)
                 + `--accelerator gpu --devices "0"` (index 0 relatif setelah env di-mask).
 
-Catatan penting `--data-path` (sumber bug awal): chemprop v2 menafsirkan JUMLAH file yang
-diberikan berbeda dari dugaan intuitif — 1 file = auto train/val/test split; 2 file =
-[train, TEST] (BUKAN [train, val]!); 3 file = [train, val, test] apa adanya tanpa split
-internal. Karena kita perlu val eksplisit tanpa memicu chemprop mem-split ulang train, fit()
-selalu mengirim 3 file [train, val, val] (val diduplikasi jadi placeholder "test" — diabaikan,
-evaluasi test asli dilakukan terpisah lewat predict_proba(), tidak pernah bocor ke training).
+Catatan `--data-path`: chemprop v2 menafsirkan jumlah file berbeda dari intuisi (1=auto split,
+2=[train,TEST], 3=[train,val,test]). Trik lama 3-file [train,val,val] rapuh (gagal di tahap
+eval test placeholder). fit() sekarang memberi 1 file (train) + `--split-sizes 0.9 0.1 0.0`:
+chemprop membuat val internal sendiri untuk early stopping, TANPA partisi test (tak ada
+test-eval yang bisa gagal). Val & test ASLI kita dievaluasi terpisah lewat predict_proba().
 
 predict_proba(smiles) -> (N, n_tasks) prob kelas positif.
 """
@@ -106,12 +105,20 @@ class DMPNNModel(BaseMolModel):
             return ["--accelerator", "gpu"]
         return ["--accelerator", "cpu"]
 
-    def _run(self, args):
+    def _run(self, args, log_name="dmpnn"):
+        # Tulis SELURUH output chemprop ke file log, lalu bila gagal sertakan ekornya di error
+        # (agar penyebab sebenarnya langsung terlihat di notebook, bukan hanya "rc=1").
+        os.makedirs(config.PATHS["logs"], exist_ok=True)
+        logpath = os.path.join(config.PATHS["logs"], f"{log_name}.log")
         proc = subprocess.run(args, env=self._env(), capture_output=True, text=True)
+        with open(logpath, "w", encoding="utf-8") as f:
+            f.write("CMD: " + " ".join(args) + "\n\n=== STDOUT ===\n" + (proc.stdout or "")
+                    + "\n=== STDERR ===\n" + (proc.stderr or ""))
         if proc.returncode != 0:
+            tail = ((proc.stdout or "")[-1200:] + "\n" + (proc.stderr or "")[-3500:]).strip()
             raise RuntimeError(
-                f"Chemprop gagal (exit {proc.returncode}).\nCMD: {' '.join(args)}\n"
-                f"STDOUT:\n{proc.stdout[-2000:]}\nSTDERR:\n{proc.stderr[-2000:]}")
+                f"Chemprop gagal (exit {proc.returncode}). Log lengkap: {logpath}\n"
+                f"CMD: {' '.join(args)}\n--- output terakhir chemprop ---\n{tail}")
         return proc
 
     def _model_path(self):
@@ -129,28 +136,20 @@ class DMPNNModel(BaseMolModel):
         train_csv = os.path.join(tmp, "train.csv")
         self._write_csv(train_smiles, train_labels, train_csv, context="fit_train")
 
-        # --data-path menerima 1-3 file, TAPI semantik chemprop v2 saat 2 file adalah
-        # [train, TEST] (bukan [train, val]!) -- lihat validate_train_args di chemprop/cli/train.py.
-        # Untuk mendapat val eksplisit tanpa memicu chemprop mem-split ulang train secara
-        # internal, kita WAJIB kasih 3 file: [train, val, test]. Karena test asli kita
-        # dievaluasi terpisah lewat predict_proba() (tidak pernah dilihat saat fit -- no
-        # leakage), file ke-3 di sini cuma placeholder (duplikat val) supaya chemprop
-        # tidak melakukan auto-split; hasil evaluasi chemprop di partisi ke-3 itu diabaikan.
-        data_paths = [train_csv]
-        has_val = val_smiles is not None
-        if has_val:
-            val_csv = os.path.join(tmp, "val.csv")
-            self._write_csv(val_smiles, val_labels, val_csv, context="fit_val")
-            data_paths.append(val_csv)   # val eksplisit (dipakai early stopping/model selection)
-            data_paths.append(val_csv)   # placeholder "test" chemprop -- diabaikan, tes asli terpisah
-
+        # DISEDERHANAKAN (fix): beri chemprop SATU file (train) saja, dan biarkan ia membuat
+        # val internal sendiri via --split-sizes 0.9 0.1 0.0 (90% latih, 10% val untuk early
+        # stopping, 0% test -> chemprop TIDAK melakukan evaluasi test). Ini menghapus trik
+        # 3-file [train,val,val] yang rapuh (sumber gagal saat tahap eval test placeholder),
+        # sekaligus mematikan tahap test-eval yang tak kita butuhkan. Val & test ASLI kita tetap
+        # dievaluasi terpisah lewat predict_proba() (tak pernah dilihat saat fit -> no leakage).
         args = [
             "chemprop", "train",
-            "--data-path", *data_paths,
+            "--data-path", train_csv,
             "--task-type", "classification",
             "--smiles-columns", "smiles",
             "--target-columns", *self.tasks,
             "--output-dir", self.save_dir,
+            "--split-sizes", "0.9", "0.1", "0.0",
             "--message-hidden-dim", str(self.cfg["hidden_size"]),
             "--depth", str(self.cfg["depth"]),
             "--epochs", str(self.cfg["epochs"]),
@@ -167,7 +166,7 @@ class DMPNNModel(BaseMolModel):
             args.append("--class-balance")             # Audit R1#3
         # Audit R2#10: sengaja TIDAK menambah flag featurizer tambahan (pure graph).
 
-        self._run(args)
+        self._run(args, log_name=f"dmpnn_train_{self.dataset}_{self.seed}")
         return self
 
     # ---------------- predict ----------------
@@ -193,7 +192,7 @@ class DMPNNModel(BaseMolModel):
             "--model-paths", self._model_path(),
             "--preds-path", out_csv,
         ]
-        self._run(args)
+        self._run(args, log_name=f"dmpnn_predict_{self.dataset}_{self.seed}")
 
         df = pd.read_csv(out_csv)
         cols = [c for c in df.columns if c in self.tasks] or \
