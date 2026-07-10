@@ -16,12 +16,31 @@ import os
 import random
 
 
+def silence_noisy_libs() -> None:
+    """Bungkam log pihak-ketiga yang bising & tidak informatif (A1 — perbaikan audit).
+
+    - RDKit mencetak `Explicit valence ... greater than permitted` / `not removing hydrogen`
+      ke stderr untuk SMILES invalid. Itu BUKAN error pipeline — molekul tsb memang sengaja
+      kita deteksi & buang (Audit R1#5). Log-nya cuma membanjiri output notebook.
+    - wandb ter-pra-instal di Kaggle & mencetak warning "not logged in". Kita tak memakainya.
+    """
+    import os
+    os.environ.setdefault("WANDB_MODE", "disabled")
+    os.environ.setdefault("WANDB_SILENT", "true")
+    try:
+        from rdkit import RDLogger
+        RDLogger.DisableLog("rdApp.*")
+    except ImportError:
+        pass
+
+
 def set_seed(seed: int) -> None:
     """Set semua RNG: python, numpy, torch (+cuda), dan PYTHONHASHSEED.
 
     RDKit tidak punya global RNG untuk enumeration — angka acaknya dikontrol per-panggil
     lewat parameter `randomSeed` di preprocessing/enumeration.py (Audit R2#7).
     """
+    silence_noisy_libs()  # A1: pastikan log bersih di setiap entrypoint ber-seed
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
 

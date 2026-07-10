@@ -24,9 +24,11 @@ import numpy as np
 import pandas as pd
 
 import config
-from src.utils.seed import set_seed
+from src.utils.seed import set_seed, silence_noisy_libs
 from src.utils import io
 from src.evaluation import metrics, significance
+
+silence_noisy_libs()  # A1
 
 # RESULTS_TABLE_ROWS -> nama model tersimpan (None = dihitung di sini)
 ROW_TO_MODEL = {
@@ -58,19 +60,21 @@ def _assemble_pred_2d(model, dataset, seed):
     return np.stack(cols, axis=1)
 
 
-def _macro_auc_for(row, dataset, seed, y_true):
-    """Macro ROC-AUC test satu metode satu seed."""
+def _pred_for(row, dataset, seed, y_true):
+    """Prediksi (N, T) satu metode satu seed (baseline sintetis dihitung di sini)."""
     model = ROW_TO_MODEL[row]
     n, T = y_true.shape
     if row == "random":
         set_seed(seed)  # Audit R3#7: random baseline diikat ke seed loop
-        pred = np.random.rand(n, T).astype(np.float32)
-    elif row == "majority_class":
-        # skor konstan = prior kelas positif train; AUC konstan = 0.5 (sanity)
-        pred = np.full((n, T), 0.5, dtype=np.float32)
-    else:
-        pred = _assemble_pred_2d(model, dataset, seed)
-    return metrics.roc_auc_macro(y_true, pred)
+        return np.random.rand(n, T).astype(np.float32)
+    if row == "majority_class":
+        return np.full((n, T), 0.5, dtype=np.float32)  # skor konstan -> AUC 0.5 (sanity)
+    return _assemble_pred_2d(model, dataset, seed)
+
+
+def _macro_auc_for(row, dataset, seed, y_true):
+    """Macro ROC-AUC test satu metode satu seed."""
+    return metrics.roc_auc_macro(y_true, _pred_for(row, dataset, seed, y_true))
 
 
 def evaluate_dataset(dataset, seeds):
@@ -104,22 +108,35 @@ def build_table(datasets, seeds):
         baseline = sig.get("baseline_method") if isinstance(sig, dict) else None
         print(f"\n[{dataset}] baseline post-hoc = {baseline}")
 
+        y_true = _load_test_labels_2d(dataset)
         for method in config.RESULTS_TABLE_ROWS:
             auc = auc_by_method[method]
             comp = comps.get(method, {})
+
+            # Bootstrap 95% CI (A2) — memakai prediksi seed PERTAMA sbg representatif;
+            # mengukur ketidakpastian ukuran test set, terpisah dari variance antar-seed (std).
+            ci_lo = ci_hi = ""
+            try:
+                pred0 = _pred_for(method, dataset, seeds[0], y_true)
+                lo, hi = metrics.bootstrap_auc_ci(y_true, pred0, n_boot=1000, seed=seeds[0])
+                ci_lo, ci_hi = round(lo, 4), round(hi, 4)
+            except FileNotFoundError:
+                pass  # prediksi belum ada (run parsial)
+
             rows.append({
                 "dataset": dataset,
                 "method": method,
                 "roc_auc_mean": round(float(np.nanmean(auc)), 4) if auc.size else np.nan,
                 "roc_auc_std": round(float(np.nanstd(auc)), 4) if auc.size else np.nan,
-                "bootstrap_ci_low": "",   # ditunda (Catatan Terbuka)
-                "bootstrap_ci_high": "",  # ditunda
+                "bootstrap_ci_low": ci_lo,
+                "bootstrap_ci_high": ci_hi,
                 "p_value_vs_baseline": round(comp["p_value"], 4) if "p_value" in comp else (
                     "baseline" if method == baseline else ""),
                 "cohens_d_vs_baseline": round(comp["cohens_d"], 4) if "cohens_d" in comp else (
                     "baseline" if method == baseline else ""),
             })
-            print(f"  {method:24s} AUC={np.nanmean(auc):.4f} ± {np.nanstd(auc):.4f}")
+            print(f"  {method:24s} AUC={np.nanmean(auc):.4f} ± {np.nanstd(auc):.4f}  "
+                  f"95%CI[{ci_lo}, {ci_hi}]")
     return pd.DataFrame(rows, columns=config.RESULTS_TABLE_COLUMNS), all_sig
 
 

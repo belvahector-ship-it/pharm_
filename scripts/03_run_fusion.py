@@ -23,9 +23,12 @@ import numpy as np
 
 import config
 from src.utils import io
+from src.utils.seed import silence_noisy_libs
 from src.evaluation import metrics
 from src.fusion import simple_average, weighted_average
 from src.fusion.stacking import StackingMetaLearner
+
+silence_noisy_libs()  # A1
 
 # nama komponen tersimpan (Fase 4 & 5)
 RAW = ["rf", "chemberta", "dmpnn"]

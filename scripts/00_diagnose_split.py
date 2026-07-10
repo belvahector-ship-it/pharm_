@@ -24,7 +24,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 
 import config
+from src.utils.seed import silence_noisy_libs
 from src import data_loader
+
+silence_noisy_libs()  # A1: bungkam log valence RDKit utk SMILES invalid (memang dibuang)
 
 
 def _scaffold_of(smi):
