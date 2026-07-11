@@ -21,6 +21,8 @@ outputs/logs/*
 # artefak besar, dan berguna untuk membandingkan riwayat eksperimen antar commit.
 # pertahankan struktur folder-nya saja untuk yang lain
 !outputs/**/.gitkeep
+# Figure kalibrasi hasil analisis mendalam: kecil (<100KB) & penting utk laporan -> ditrack.
+!outputs/figures/calibration_*.png
 
 # --- Model / artefak besar ---
 *.pt
