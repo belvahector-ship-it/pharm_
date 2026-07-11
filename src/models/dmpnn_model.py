@@ -29,8 +29,11 @@ predict_proba(smiles) -> (N, n_tasks) prob kelas positif.
 from __future__ import annotations
 
 import os
+import queue
 import subprocess
 import tempfile
+import threading
+import time
 
 import numpy as np
 import pandas as pd
@@ -105,17 +108,57 @@ class DMPNNModel(BaseMolModel):
             return ["--accelerator", "gpu"]
         return ["--accelerator", "cpu"]
 
-    def _run(self, args, log_name="dmpnn"):
-        # Tulis SELURUH output chemprop ke file log, lalu bila gagal sertakan ekornya di error
-        # (agar penyebab sebenarnya langsung terlihat di notebook, bukan hanya "rc=1").
+    def _run(self, args, log_name="dmpnn", heartbeat_sec=30):
+        # STREAMING (bukan capture_output=True): versi lama menelan SELURUH output chemprop
+        # secara diam-diam dan baru menuliskannya SETELAH proses selesai -> kalau chemprop
+        # macet/lambat di tengah jalan, notebook terlihat "bengong" TANPA CARA mengecek apa
+        # pun sedang terjadi (persis keluhan "status tidak jelas"). Sekarang output dialirkan
+        # LIVE ke notebook (print per baris) SEKALIGUS ditulis ke log file, plus heartbeat
+        # setiap `heartbeat_sec` detik tanpa baris baru -> membedakan "diam tapi hidup" dari
+        # "benar-benar macet" (proses sudah mati tapi kernel tak sadar, dsb).
         os.makedirs(config.PATHS["logs"], exist_ok=True)
         logpath = os.path.join(config.PATHS["logs"], f"{log_name}.log")
-        proc = subprocess.run(args, env=self._env(), capture_output=True, text=True)
+
+        proc = subprocess.Popen(
+            args, env=self._env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1)
+
+        q: queue.Queue[str | None] = queue.Queue()
+
+        def _reader():
+            for line in proc.stdout:
+                q.put(line)
+            q.put(None)  # tanda EOF
+
+        threading.Thread(target=_reader, daemon=True).start()
+
+        print(f"[dmpnn] menjalankan: {' '.join(args)}", flush=True)
+        lines = []
+        t_last = time.time()
+        while True:
+            try:
+                line = q.get(timeout=heartbeat_sec)
+            except queue.Empty:
+                elapsed = int(time.time() - t_last)
+                alive = proc.poll() is None
+                print(f"[dmpnn] ... masih {'berjalan' if alive else 'BERHENTI (kode: '+str(proc.poll())+')'}"
+                      f", {elapsed}s tanpa output baru (heartbeat, bukan macet).", flush=True)
+                if not alive:
+                    break
+                continue
+            if line is None:  # EOF -> proses selesai
+                break
+            lines.append(line)
+            t_last = time.time()
+            print(f"    [dmpnn] {line.rstrip()}", flush=True)
+
+        proc.wait()
+        full_output = "".join(lines)
         with open(logpath, "w", encoding="utf-8") as f:
-            f.write("CMD: " + " ".join(args) + "\n\n=== STDOUT ===\n" + (proc.stdout or "")
-                    + "\n=== STDERR ===\n" + (proc.stderr or ""))
+            f.write("CMD: " + " ".join(args) + "\n\n=== OUTPUT (stdout+stderr) ===\n" + full_output)
+
         if proc.returncode != 0:
-            tail = ((proc.stdout or "")[-1200:] + "\n" + (proc.stderr or "")[-3500:]).strip()
+            tail = full_output[-3500:]
             raise RuntimeError(
                 f"Chemprop gagal (exit {proc.returncode}). Log lengkap: {logpath}\n"
                 f"CMD: {' '.join(args)}\n--- output terakhir chemprop ---\n{tail}")
