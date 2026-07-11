@@ -68,7 +68,11 @@ def main():
             set_seed(seed)  # Audit R2#7: enumeration seed = seed model
             model = _load_trained_chemberta(dataset, seed, ds.tasks)
             for split in splits:
-                p_tta = tta_predict(model, ds.smiles[split], seed=seed)
+                n_mol = len(ds.smiles[split])
+                print(f"  [mulai] {dataset} seed={seed} {split}  ({n_mol} molekul, "
+                      f"~{config.TTA['n_variants']} varian/molekul)...", flush=True)
+                p_tta = tta_predict(model, ds.smiles[split], seed=seed,
+                                    label=f"{dataset} seed={seed} {split}")
                 _save_per_task(p_tta, dataset, seed, split)
                 print(f"  [ok] {dataset} seed={seed} {split}  p_cb_tta {p_tta.shape}")
 
