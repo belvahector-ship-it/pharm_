@@ -13,11 +13,13 @@ data/splits/*
 !data/splits/.gitkeep
 
 outputs/predictions/*
-outputs/results/*
 outputs/figures/*
 outputs/checkpoints/*
 outputs/logs/*
-# pertahankan struktur folder-nya saja
+# outputs/results/ SENGAJA DIKECUALIKAN dari ignore di bawah (ditrack di git) —
+# berisi ringkasan hasil akhir (final_table.csv, significance.json, dll), bukan
+# artefak besar, dan berguna untuk membandingkan riwayat eksperimen antar commit.
+# pertahankan struktur folder-nya saja untuk yang lain
 !outputs/**/.gitkeep
 
 # --- Model / artefak besar ---
@@ -26,6 +28,8 @@ outputs/logs/*
 *.npy
 *.pkl
 *.h5
+outputs/*.zip
+hasil_outputs.zip
 
 # --- OS / editor ---
 .DS_Store
