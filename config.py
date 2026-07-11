@@ -113,6 +113,13 @@ TTA = {
     "replaces_raw_prediction": True,           # p_cb_tta menggantikan p_cb mentah sbg input fusion
     # Audit R3#1: TTA juga dijalankan di VALIDATION set (bukan cuma test) untuk bobot ensemble.
     "run_on_validation": True,
+    # --- TUNING Prioritas 1: adaptive TTA gating ---
+    # Tes 1 membuktikan TTA MENGHANCURKAN dataset sangat imbalanced (ClinTox 0.986->0.404;
+    # flip-rate kelas minoritas 88-90%). Bila proporsi kelas minoritas (di VAL set) < ambang
+    # ini, TTA dimatikan otomatis untuk dataset tsb -> kontribusi ChemBERTa memakai prediksi
+    # mentah, bukan p_cb_tta. Ini "adaptive TTA gating" (kontribusi metodologis paper).
+    "adaptive_gating": True,
+    "min_minority_ratio": 0.15,   # BBBP(0.475)/BACE(0.395) lolos; ClinTox(0.06) di-gate OFF.
 }
 
 # ---------------------------------------------------------------------------
