@@ -37,7 +37,10 @@ def _load_trained_chemberta(dataset, seed, tasks):
     import torch
     model.net = model._build_net()
     ck = torch.load(ckpt, map_location=model._resolve_device())
-    state = ck.get("best_state") or ck["model_state"]
+    # final_state = keputusan EMA-vs-raw tersimpan (checkpoint baru, lihat _save_final_state
+    # di chemberta_model.py). Checkpoint LAMA (sebelum ada EMA) tak punya field ini -> fallback
+    # ke best_state/model_state, perilaku identik dgn sebelumnya (tak ada regresi ke tes1/tuned_v1/tuned_v2).
+    state = ck.get("final_state") or ck.get("best_state") or ck["model_state"]
     model.net.load_state_dict(state)
     return model
 

@@ -58,3 +58,23 @@ class BaseMolModel(ABC):
             neg = float(np.sum(col[valid] == 0))
             weights[t] = (neg / pos) if pos > 0 else 1.0
         return weights
+
+    @staticmethod
+    def class_alpha_from_labels(labels: np.ndarray) -> np.ndarray:
+        """alpha per task untuk Focal Loss (Lin et al. 2017). labels: (N, T), NaN diabaikan.
+
+        alpha_t = proporsi kelas NEGATIF -> dipakai sbg bobot kelas POSITIF, jadi kelas
+        minoritas (biasanya positif di ClinTox) otomatis mendapat alpha lebih besar.
+        """
+        labels = np.asarray(labels, dtype=np.float32)
+        if labels.ndim == 1:
+            labels = labels[:, None]
+        alpha = np.full((labels.shape[1],), 0.5, dtype=np.float32)
+        for t in range(labels.shape[1]):
+            col = labels[:, t]
+            valid = ~np.isnan(col)
+            pos = float(np.sum(col[valid] == 1))
+            neg = float(np.sum(col[valid] == 0))
+            total = pos + neg
+            alpha[t] = (neg / total) if total > 0 else 0.5
+        return alpha

@@ -135,6 +135,42 @@ ENSEMBLE = {
 }
 
 # ---------------------------------------------------------------------------
+# Improvement v3 (Category C — perlu retraining/GPU). Hasil TERPISAH lewat nama model
+# baru ("chemberta_v3", "dmpnn_v3") & folder outputs/results/v3/ — TIDAK menimpa
+# tes1/tuned_v1/tuned_v2 (sama prinsip "hasil terpisah" dgn tuning sebelumnya).
+# Sumber: docs/TODO_peningkatan_performa.md item 1.2 & 1.2b, dari AIIA_Report.
+# ---------------------------------------------------------------------------
+EXTRA_SEEDS = [5, 6, 7, 8, 9]   # SEEDS asli [0..4] + ini -> 10 total. Cukup naikkan list
+                                 # ini (mis. sampai 19) bila ingin 15-20 seed spt saran AIIA
+                                 # penuh; SEEDS di bawah otomatis ikut (dipakai SEMUA skrip
+                                 # existing tanpa perubahan kode -> tes1/tuned_v1/tuned_v2
+                                 # ikut memakai seed tambahan begitu di-rerun).
+SEEDS = SEEDS + EXTRA_SEEDS
+
+FOCAL_LOSS = {
+    # AIIA: BBBP/BACE sudah balanced (tak perlu); ClinTox sangat imbalanced -> target utama.
+    "enabled_for_datasets": ["clintox"],
+    "gamma": 2.0,   # standar Lin et al. 2017 (RetinaNet); alpha per task dihitung otomatis
+                     # dari label train (lihat BaseMolModel.class_alpha_from_labels).
+}
+
+CHEMBERTA_EMA = {
+    "enabled": True,   # HANYA dipakai model variant="v3" (lihat chemberta_model.py)
+    "decay": 0.999,
+    # Dipakai HANYA jika val_loss(bobot EMA) < val_loss(bobot terbaik non-EMA) -> aditif,
+    # tak pernah membuat hasil LEBIH BURUK dari tanpa EMA (dicek & dilog di fit()).
+}
+
+DMPNN_LOSS_OVERRIDE = {
+    # PENTING (keterbatasan dicatat jujur): Focal Loss TIDAK tersedia di chemprop CLI 2.2.4
+    # (LossFunctionRegistry hanya: bce/ce/binary-mcc/multiclass-mcc/dirichlet/...). "binary-mcc"
+    # (Matthews Correlation Coefficient loss) dipakai sbg PENGGANTI yang sah & native chemprop,
+    # dikenal robust thd class imbalance -- BUKAN focal loss asli. Hanya dipakai model
+    # variant="v3" pada dataset di dict ini; dataset lain tetap "bce" default (tak berubah).
+    "clintox": "binary-mcc",
+}
+
+# ---------------------------------------------------------------------------
 # Statistical test
 # ---------------------------------------------------------------------------
 STATISTICAL_TEST = {

@@ -46,8 +46,10 @@ from src.utils import io
 class DMPNNModel(BaseMolModel):
     name = "dmpnn"
 
-    def __init__(self, dataset: str, seed: int, tasks: list[str]):
+    def __init__(self, dataset: str, seed: int, tasks: list[str], variant: str = "base"):
         super().__init__(dataset, seed, tasks)
+        self.variant = variant
+        self.name = "dmpnn" if variant == "base" else f"dmpnn_{variant}"
         self.cfg = config.DMPNN
         self.save_dir = os.path.join(
             config.PATHS["checkpoints"], f"{self.name}_{self.dataset}_{self.seed}")
@@ -205,12 +207,22 @@ class DMPNNModel(BaseMolModel):
             "--patience", str(self.cfg["early_stopping_patience"]),  # Audit R2#11
             *self._accel_flags(),
         ]
+        # Category C (variant="v3"): ganti loss function utk dataset di config.DMPNN_LOSS_OVERRIDE
+        # (ClinTox -> "binary-mcc"). Focal Loss TIDAK ada di chemprop CLI 2.2.4 -- binary-mcc
+        # (Matthews Correlation Coefficient loss, native & robust thd imbalance) dipakai sbg
+        # pengganti yg sah, dicatat eksplisit sbg penyimpangan dari rekomendasi literal AIIA.
+        loss_override = (config.DMPNN_LOSS_OVERRIDE.get(self.dataset)
+                         if self.variant == "v3" else None)
+        if loss_override:
+            args += ["--loss-function", loss_override]
         # Audit R1#3: class balance. TAPI `--class-balance` chemprop v2 hanya sah untuk
         # klasifikasi SINGLE-TASK (sampler menyeimbangkan pos/neg berdasar SATU kolom target).
         # Untuk multi-task (ClinTox: FDA_APPROVED + CT_TOX) chemprop GAGAL (rc=1) — inilah
         # penyebab D-MPNN sukses di bbbp/bace tapi crash di clintox. Maka aktifkan hanya bila
-        # single-task; untuk multi-task, D-MPNN dilatih tanpa class-balance (keterbatasan dicatat).
-        if config.CLASS_IMBALANCE[self.dataset]["balanced"] and len(self.tasks) == 1:
+        # single-task DAN tak sedang memakai loss_override (mis. binary-mcc sudah menangani
+        # imbalance dgn caranya sendiri, --class-balance tetap sah dikombinasikan tapi sengaja
+        # tak ditumpuk dgn override agar efek loss_override terlihat murni/terisolasi).
+        elif config.CLASS_IMBALANCE[self.dataset]["balanced"] and len(self.tasks) == 1:
             args.append("--class-balance")
         # Audit R2#10: sengaja TIDAK menambah flag featurizer tambahan (pure graph).
 
