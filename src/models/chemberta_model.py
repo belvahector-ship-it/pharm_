@@ -96,11 +96,27 @@ class ChemBERTaModel(BaseMolModel):
         # Ini adalah makna sebenarnya dari "CLS pooling" (Audit R1#4) untuk checkpoint headless:
         # deterministik, standar literatur, dan tidak bergantung lapisan pooler pretrained yang
         # memang tidak ada. Berlaku sama untuk mode fine-tune maupun freeze.
+        # PENTING (fix stabilitas): _build_net() dipanggil FRESH di SETIAP fit() (1x per seed) —
+        # dgn 10 seed x 3 dataset x beberapa tahap (train/TTA-reload/instance-gate v3) ini bisa
+        # 100+ panggilan dalam SATU sesi Kaggle. from_pretrained() TANPA local_files_only masih
+        # melakukan validasi network ke HF Hub SETIAP kali walau bobot sudah ter-cache lokal ->
+        # rentan hang/rate-limit kumulatif di sesi panjang (gejala: proses "diam", GPU idle,
+        # TANPA error jelas -- network hang, bukan crash). Strategi: coba local_files_only=True
+        # dulu (murni baca cache lokal, NOL panggilan network); baru fallback ke network SEKALI
+        # kalau memang belum pernah ter-cache (mis. run pertama di sesi ini).
+        def _load(local_only):
+            try:
+                return AutoModel.from_pretrained(
+                    self.cfg["checkpoint"], add_pooling_layer=False, local_files_only=local_only)
+            except TypeError:
+                # arsitektur yang tak menerima kwarg add_pooling_layer -> fallback, pooler diabaikan di forward.
+                return AutoModel.from_pretrained(
+                    self.cfg["checkpoint"], local_files_only=local_only)
+
         try:
-            encoder = AutoModel.from_pretrained(self.cfg["checkpoint"], add_pooling_layer=False)
-        except TypeError:
-            # arsitektur yang tak menerima kwarg tsb -> fallback, pooler diabaikan di forward.
-            encoder = AutoModel.from_pretrained(self.cfg["checkpoint"])
+            encoder = _load(local_only=True)
+        except Exception:
+            encoder = _load(local_only=False)  # belum ter-cache -> download sekali (network)
 
         if self.cfg["freeze_encoder"]:
             for p in encoder.parameters():
