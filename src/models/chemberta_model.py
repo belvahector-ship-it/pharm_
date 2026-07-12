@@ -96,22 +96,32 @@ class ChemBERTaModel(BaseMolModel):
         # Ini adalah makna sebenarnya dari "CLS pooling" (Audit R1#4) untuk checkpoint headless:
         # deterministik, standar literatur, dan tidak bergantung lapisan pooler pretrained yang
         # memang tidak ada. Berlaku sama untuk mode fine-tune maupun freeze.
-        # PENTING (fix stabilitas): _build_net() dipanggil FRESH di SETIAP fit() (1x per seed) —
-        # dgn 10 seed x 3 dataset x beberapa tahap (train/TTA-reload/instance-gate v3) ini bisa
-        # 100+ panggilan dalam SATU sesi Kaggle. from_pretrained() TANPA local_files_only masih
-        # melakukan validasi network ke HF Hub SETIAP kali walau bobot sudah ter-cache lokal ->
-        # rentan hang/rate-limit kumulatif di sesi panjang (gejala: proses "diam", GPU idle,
-        # TANPA error jelas -- network hang, bukan crash). Strategi: coba local_files_only=True
+        # PENTING (fix stabilitas #1): _build_net() dipanggil FRESH di SETIAP fit() (1x per
+        # seed) — dgn 10 seed x 3 dataset x beberapa tahap (train/TTA-reload/instance-gate v3)
+        # ini bisa 100+ panggilan dalam SATU sesi Kaggle. from_pretrained() TANPA
+        # local_files_only masih melakukan validasi network ke HF Hub SETIAP kali walau bobot
+        # sudah ter-cache lokal -> rentan hang/rate-limit kumulatif di sesi panjang (gejala:
+        # proses "diam", GPU idle, TANPA error jelas). Strategi: coba local_files_only=True
         # dulu (murni baca cache lokal, NOL panggilan network); baru fallback ke network SEKALI
         # kalau memang belum pernah ter-cache (mis. run pertama di sesi ini).
+        #
+        # PENTING (fix stabilitas #2): dilaporkan hang JUGA terjadi pada log dgn pesan
+        # "Materializing param=..." berhenti di 0% -- itu pesan dari `accelerate` saat
+        # from_pretrained() memuat bobot lewat mekanisme meta-device (dipicu otomatis oleh
+        # low_cpu_mem_usage=True, default di transformers versi baru). Mekanisme ini pernah
+        # dilaporkan hang pada kombinasi versi transformers/accelerate/torch tertentu.
+        # low_cpu_mem_usage=False memaksa jalur pemuatan KLASIK (load state_dict penuh lalu
+        # .to(device)) yang sepenuhnya menghindari kode "Materializing param" itu -- lebih
+        # sedikit pemakaian memori CPU sementara jadi tak relevan di sini (model kecil, 77M).
         def _load(local_only):
             try:
                 return AutoModel.from_pretrained(
-                    self.cfg["checkpoint"], add_pooling_layer=False, local_files_only=local_only)
+                    self.cfg["checkpoint"], add_pooling_layer=False, local_files_only=local_only,
+                    low_cpu_mem_usage=False)
             except TypeError:
                 # arsitektur yang tak menerima kwarg add_pooling_layer -> fallback, pooler diabaikan di forward.
                 return AutoModel.from_pretrained(
-                    self.cfg["checkpoint"], local_files_only=local_only)
+                    self.cfg["checkpoint"], local_files_only=local_only, low_cpu_mem_usage=False)
 
         try:
             encoder = _load(local_only=True)
@@ -203,7 +213,10 @@ class ChemBERTaModel(BaseMolModel):
         device = self._resolve_device()
         self.net = self._build_net()
 
-        use_focal = self.dataset in config.FOCAL_LOSS["enabled_for_datasets"]
+        # BUG FIX: harus digate oleh variant=="v3" -- tanpa ini, model "base" (dipakai tes1/
+        # tuned_v1/tuned_v2, HARUS identik dgn sebelum Category C) diam-diam ikut memakai Focal
+        # Loss di ClinTox, melanggar janji "hasil v3 terpisah, tidak menimpa tahap sebelumnya".
+        use_focal = self.variant == "v3" and self.dataset in config.FOCAL_LOSS["enabled_for_datasets"]
         if use_focal:
             alpha = self.class_alpha_from_labels(train_labels)
             alpha_t = torch.tensor(alpha, dtype=torch.float32, device=device)
