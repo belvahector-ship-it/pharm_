@@ -110,7 +110,7 @@ class DMPNNModel(BaseMolModel):
             return ["--accelerator", "gpu"]
         return ["--accelerator", "cpu"]
 
-    def _run(self, args, log_name="dmpnn", heartbeat_sec=30):
+    def _run(self, args, log_name="dmpnn", heartbeat_sec=30, timeout_sec=900):
         # STREAMING (bukan capture_output=True): versi lama menelan SELURUH output chemprop
         # secara diam-diam dan baru menuliskannya SETELAH proses selesai -> kalau chemprop
         # macet/lambat di tengah jalan, notebook terlihat "bengong" TANPA CARA mengecek apa
@@ -118,6 +118,16 @@ class DMPNNModel(BaseMolModel):
         # LIVE ke notebook (print per baris) SEKALIGUS ditulis ke log file, plus heartbeat
         # setiap `heartbeat_sec` detik tanpa baris baru -> membedakan "diam tapi hidup" dari
         # "benar-benar macet" (proses sudah mati tapi kernel tak sadar, dsb).
+        #
+        # TIMEOUT (fix stabilitas): dilaporkan chemprop bisa hang TOTAL (tanpa exception, GPU
+        # idle) setelah PULUHAN kali dipanggil sukses dalam satu sesi panjang (mis. macet di
+        # seed ke-27 dari 90 pemanggilan chemprop dalam satu run dmpnn) -- kemungkinan resource
+        # Kaggle (GPU/driver) yg terdegradasi seiring sesi panjang, bukan config yg salah. Tanpa
+        # timeout, sel notebook nunggu SELAMANYA tanpa kabar jelas siapa yg macet. `timeout_sec`
+        # (default 900s=15 menit, >20x rata-rata waktu training 1 seed yg pernah tercatat
+        # ~36 detik) membatasi kerugian per macet & kasih tahu PERSIS dataset/seed mana yg
+        # bermasalah -- resume otomatis (predictions_exist check) akan lanjut ke seed berikutnya
+        # begitu di-run ulang, jadi 1 seed macet tidak mengunci seluruh sesi.
         os.makedirs(config.PATHS["logs"], exist_ok=True)
         logpath = os.path.join(config.PATHS["logs"], f"{log_name}.log")
 
@@ -136,16 +146,25 @@ class DMPNNModel(BaseMolModel):
 
         print(f"[dmpnn] menjalankan: {' '.join(args)}", flush=True)
         lines = []
-        t_last = time.time()
+        t_start = t_last = time.time()
+        timed_out = False
         while True:
             try:
                 line = q.get(timeout=heartbeat_sec)
             except queue.Empty:
-                elapsed = int(time.time() - t_last)
+                elapsed_silent = int(time.time() - t_last)
+                elapsed_total = time.time() - t_start
                 alive = proc.poll() is None
                 print(f"[dmpnn] ... masih {'berjalan' if alive else 'BERHENTI (kode: '+str(proc.poll())+')'}"
-                      f", {elapsed}s tanpa output baru (heartbeat, bukan macet).", flush=True)
+                      f", {elapsed_silent}s tanpa output baru, total {int(elapsed_total)}s "
+                      f"(heartbeat, bukan macet -- batas timeout {timeout_sec}s).", flush=True)
                 if not alive:
+                    break
+                if elapsed_total > timeout_sec:
+                    print(f"[dmpnn] !! TIMEOUT ({int(elapsed_total)}s > {timeout_sec}s) -> "
+                          f"kill paksa proses (pid={proc.pid}).", flush=True)
+                    proc.kill()
+                    timed_out = True
                     break
                 continue
             if line is None:  # EOF -> proses selesai
@@ -154,11 +173,20 @@ class DMPNNModel(BaseMolModel):
             t_last = time.time()
             print(f"    [dmpnn] {line.rstrip()}", flush=True)
 
-        proc.wait()
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
         full_output = "".join(lines)
         with open(logpath, "w", encoding="utf-8") as f:
             f.write("CMD: " + " ".join(args) + "\n\n=== OUTPUT (stdout+stderr) ===\n" + full_output)
 
+        if timed_out:
+            raise TimeoutError(
+                f"Chemprop TIMEOUT setelah {timeout_sec}s tanpa selesai -- {log_name}. Proses "
+                f"di-kill paksa (kemungkinan hang infrastruktur Kaggle, BUKAN training lambat "
+                f"wajar). Log parsial: {logpath}\nCMD: {' '.join(args)}\n"
+                f"Jalankan ulang Run All -- resume otomatis akan skip seed yang sudah selesai.")
         if proc.returncode != 0:
             tail = full_output[-3500:]
             raise RuntimeError(
