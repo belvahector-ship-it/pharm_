@@ -1,0 +1,152 @@
+{
+  "bbbp": {
+    "chemberta_v3_solo": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "dmpnn_v3_solo": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "chemberta_tta_igate": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "chemberta_v3_tta_igate": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "ensemble_v3_avg": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "ensemble_v3_weighted": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    }
+  },
+  "bace": {
+    "chemberta_v3_solo": {
+      "tes1_baseline(ecfp_rf)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "dmpnn_v3_solo": {
+      "tes1_baseline(ecfp_rf)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "chemberta_tta_igate": {
+      "tes1_baseline(ecfp_rf)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "chemberta_v3_tta_igate": {
+      "tes1_baseline(ecfp_rf)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "ensemble_v3_avg": {
+      "tes1_baseline(ecfp_rf)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "ensemble_v3_weighted": {
+      "tes1_baseline(ecfp_rf)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    }
+  },
+  "clintox": {
+    "chemberta_v3_solo": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "dmpnn_v3_solo": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "chemberta_tta_igate": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "chemberta_v3_tta_igate": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "ensemble_v3_avg": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    },
+    "ensemble_v3_weighted": {
+      "tes1_baseline(chemberta_solo)": {
+        "n": 0,
+        "p_ttest": NaN,
+        "p_wilcoxon": NaN,
+        "cohens_d": NaN
+      }
+    }
+  }
+}
