@@ -148,10 +148,24 @@ class DMPNNModel(BaseMolModel):
         lines = []
         t_start = t_last = time.time()
         timed_out = False
+        # Dedup baris identik BERURUTAN (mis. warning RDKit "not removing hydrogen atom
+        # without neighbors" yang berulang ratusan kali saat chemprop memuat banyak molekul
+        # sekaligus -- BENIGN, tapi kalau ditampilkan mentah2 di notebook TERLIHAT seperti
+        # macet/infinite-loop, bikin hang asli makin susah dibedakan). Semua baris TETAP
+        # ditulis utuh ke file log (tak ada informasi hilang), hanya tampilan LIVE yg diringkas.
+        prev_line, repeat_count = None, 0
+
+        def _flush_repeat_summary():
+            if repeat_count > 1:
+                print(f"    [dmpnn] ... (baris di atas berulang {repeat_count}x, disingkat -- "
+                      f"lihat log lengkap di {logpath})", flush=True)
+
         while True:
             try:
                 line = q.get(timeout=heartbeat_sec)
             except queue.Empty:
+                _flush_repeat_summary()
+                prev_line, repeat_count = None, 0
                 elapsed_silent = int(time.time() - t_last)
                 elapsed_total = time.time() - t_start
                 alive = proc.poll() is None
@@ -168,10 +182,19 @@ class DMPNNModel(BaseMolModel):
                     break
                 continue
             if line is None:  # EOF -> proses selesai
+                _flush_repeat_summary()
                 break
             lines.append(line)
             t_last = time.time()
-            print(f"    [dmpnn] {line.rstrip()}", flush=True)
+            if line == prev_line:
+                repeat_count += 1
+                if repeat_count in (2, 10, 50) or repeat_count % 200 == 0:
+                    print(f"    [dmpnn] {line.rstrip()}  (berulang {repeat_count}x sejauh ini...)",
+                          flush=True)
+            else:
+                _flush_repeat_summary()
+                print(f"    [dmpnn] {line.rstrip()}", flush=True)
+                prev_line, repeat_count = line, 1
 
         try:
             proc.wait(timeout=15)

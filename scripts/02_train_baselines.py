@@ -82,15 +82,33 @@ def main():
 
     print(f"=== Fase 4: train baselines  models={models} "
           f"datasets={args.datasets} seeds={args.seeds} ===")
+    failures = []
     for dataset in args.datasets:
         ds = data_loader.build_split(dataset)
         io.save_labels(ds.labels["val"], dataset, "val")
         io.save_labels(ds.labels["test"], dataset, "test")
         for seed in args.seeds:
             for m in models:
-                train_one(m, dataset, seed, ds)
+                # PENTING (fix "blast radius"): SATU combo gagal/timeout (mis. hang
+                # infrastruktur Kaggle di satu seed) TIDAK BOLEH menghentikan 29 combo
+                # lain dalam proses ini -- apalagi memicu notebook mematikan proses SIBLING
+                # (chemberta/dmpnn/rf lain) yang sedang jalan sukses. Dicatat & DILEWATI;
+                # resume otomatis (predictions_exist check di train_one) akan retry combo
+                # yang gagal ini di run berikutnya, TANPA mengulang yang sudah sukses.
+                try:
+                    train_one(m, dataset, seed, ds)
+                except Exception as e:
+                    failures.append((m, dataset, seed, f"{type(e).__name__}: {e}"))
+                    print(f"  [GAGAL, DILEWATI] {m} {dataset} seed={seed}: "
+                          f"{type(e).__name__}: {str(e)[:200]}", flush=True)
 
-    print("\nFASE 4 selesai untuk konfigurasi yang diminta.")
+    if failures:
+        print(f"\n!! {len(failures)} combo GAGAL/TIMEOUT (dilewati, TIDAK menghentikan combo lain):")
+        for m, dataset, seed, err in failures:
+            print(f"   - {m} {dataset} seed={seed}: {err[:150]}")
+        print("Jalankan ulang (Run All / script ini lagi) -- resume otomatis retry HANYA combo di atas.")
+    else:
+        print("\nFASE 4 selesai untuk konfigurasi yang diminta -- semua combo sukses.")
 
 
 if __name__ == "__main__":

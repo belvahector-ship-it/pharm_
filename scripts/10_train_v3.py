@@ -81,6 +81,7 @@ def main():
 
     print(f"=== Category C (v3): train  models={models} "
           f"datasets={args.datasets} seeds={args.seeds} ===")
+    failures = []
     for dataset in args.datasets:
         ds = data_loader.build_split(dataset)
         # label val/test sudah tersimpan dari Fase 4 (scripts/02); simpan ulang di sini juga
@@ -89,9 +90,22 @@ def main():
         io.save_labels(ds.labels["test"], dataset, "test")
         for seed in args.seeds:
             for m in models:
-                train_one(m, dataset, seed, ds)
+                # Sama prinsip dgn scripts/02_train_baselines.py: 1 combo gagal/timeout TIDAK
+                # menghentikan combo lain / proses sibling. Dicatat, dilewati, resume otomatis.
+                try:
+                    train_one(m, dataset, seed, ds)
+                except Exception as e:
+                    failures.append((m, dataset, seed, f"{type(e).__name__}: {e}"))
+                    print(f"  [GAGAL, DILEWATI] {m} {dataset} seed={seed}: "
+                          f"{type(e).__name__}: {str(e)[:200]}", flush=True)
 
-    print("\nCategory C (v3) training selesai untuk konfigurasi yang diminta.")
+    if failures:
+        print(f"\n!! {len(failures)} combo GAGAL/TIMEOUT (dilewati, TIDAK menghentikan combo lain):")
+        for m, dataset, seed, err in failures:
+            print(f"   - {m} {dataset} seed={seed}: {err[:150]}")
+        print("Jalankan ulang (Run All / script ini lagi) -- resume otomatis retry HANYA combo di atas.")
+    else:
+        print("\nCategory C (v3) training selesai untuk konfigurasi yang diminta -- semua combo sukses.")
 
 
 if __name__ == "__main__":
