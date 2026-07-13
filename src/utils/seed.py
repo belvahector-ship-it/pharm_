@@ -45,11 +45,37 @@ def silence_noisy_libs() -> None:
         pass
 
 
-def set_seed(seed: int) -> None:
-    """Set semua RNG: python, numpy, torch (+cuda), dan PYTHONHASHSEED.
+def _seed_torch_cuda(seed: int) -> None:
+    """Bagian set_seed() yg menyentuh torch/CUDA -- dipisah agar bisa dijalankan dgn
+    watchdog timeout (lihat set_seed(touch_torch_cuda=)).
+    """
+    import torch
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    # Determinisme penuh (sedikit lebih lambat) — layak untuk paper reproducible.
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def set_seed(seed: int, touch_torch_cuda: bool = True, cuda_timeout_sec: float = 20.0) -> None:
+    """Set semua RNG: python, numpy, torch (+cuda) [opsional], dan PYTHONHASHSEED.
 
     RDKit tidak punya global RNG untuk enumeration — angka acaknya dikontrol per-panggil
     lewat parameter `randomSeed` di preprocessing/enumeration.py (Audit R2#7).
+
+    touch_torch_cuda=False: LEWATI bagian torch/CUDA sepenuhnya. Dipakai utk model yang
+    TIDAK butuh RNG torch di proses Python ini (mis. D-MPNN -- chemprop dijalankan sbg
+    proses CLI TERPISAH dgn --data-seed/--pytorch-seed sendiri; parent process TAK PERNAH
+    memakai torch utk D-MPNN). Fix stabilitas: `torch.cuda.is_available()` /
+    `manual_seed_all()` pernah dilaporkan HANG TOTAL tanpa error di sesi Kaggle panjang
+    (diduga driver/CUDA context terdegradasi setelah puluhan subprocess chemprop terpisah
+    membuat & membongkar context masing2) -- utk D-MPNN, panggilan ini TIDAK PERNAH
+    diperlukan sama sekali, jadi paling aman dilewati total, bukan cuma di-timeout.
+
+    cuda_timeout_sec: jaring pengaman TAMBAHAN utk kasus touch_torch_cuda=True (mis.
+    ChemBERTa, yang MEMANG butuh torch/CUDA) -- kalau tetap hang, jangan diam selamanya:
+    lempar peringatan & lanjut (thread yg hang dibiarkan jadi daemon, bukan diblokir).
     """
     silence_noisy_libs()  # A1: pastikan log bersih di setiap entrypoint ber-seed
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -61,14 +87,32 @@ def set_seed(seed: int) -> None:
     except ImportError:
         pass
 
+    if not touch_torch_cuda:
+        return
+
     try:
-        import torch
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
-        # Determinisme penuh (sedikit lebih lambat) — layak untuk paper reproducible.
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        import threading
+        done = threading.Event()
+        error = []
+
+        def _run():
+            try:
+                _seed_torch_cuda(seed)
+            except ImportError:
+                pass
+            except Exception as e:  # noqa: BLE001 -- dilog, tak menghentikan caller
+                error.append(e)
+            finally:
+                done.set()
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        if not done.wait(timeout=cuda_timeout_sec):
+            print(f"[set_seed] !! torch/CUDA seeding TIDAK selesai dalam {cuda_timeout_sec}s "
+                  f"-- kemungkinan driver/CUDA context bermasalah. Dilewati (bukan di-block "
+                  f"selamanya); thread dibiarkan jalan di background sbg daemon.", flush=True)
+        elif error:
+            print(f"[set_seed] torch/CUDA seeding gagal ({error[0]!r}), diabaikan.", flush=True)
     except ImportError:
         pass
 

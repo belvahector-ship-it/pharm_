@@ -56,7 +56,10 @@ def train_one(model_name: str, dataset: str, seed: int, ds: data_loader.DatasetS
         print(f"  [skip] {model_name} {dataset} seed={seed} (prediksi sudah ada)")
         return
 
-    set_seed(seed)
+    # D-MPNN TIDAK butuh torch/CUDA di proses Python ini (chemprop = proses CLI TERPISAH
+    # dgn --data-seed/--pytorch-seed sendiri) -- lewati sentuhan torch.cuda yg pernah
+    # dilaporkan hang tanpa error di sesi Kaggle panjang (lihat src/utils/seed.py).
+    set_seed(seed, touch_torch_cuda=model_name not in ("dmpnn", "dmpnn_v3"))
     model = get_model(model_name, dataset, seed, tasks)
     model.fit(ds.smiles["train"], ds.labels["train"],
               ds.smiles["val"], ds.labels["val"])
