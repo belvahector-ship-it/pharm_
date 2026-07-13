@@ -1,0 +1,4 @@
+dataset,best_method,best_type,val_auc_selection,test_auc_mean,test_auc_std,bootstrap_ci_low,bootstrap_ci_high,tta_gated_off
+bbbp,chemberta_solo,individual,0.9892,0.7075,0.0117,0.6152,0.759,False
+bace,ecfp_rf,individual,0.7238,0.8679,0.0033,0.7984,0.9219,False
+clintox,weighted_cb_dmpnn,ensemble,0.9764,0.9916,0.0031,0.983,1.0,True

@@ -1,0 +1,4 @@
+dataset,tes1_best_individual,tes1_best_ensemble,tuned_v1_best,tuned_v2_best,tuned_v2_method
+bbbp,0.7075,0.72,0.72,0.7075,chemberta_solo
+bace,0.8679,0.8443,0.8681,0.8679,ecfp_rf
+clintox,0.9851,0.9796,0.9875,0.9916,weighted_cb_dmpnn

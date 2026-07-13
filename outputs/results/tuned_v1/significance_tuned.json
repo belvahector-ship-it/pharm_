@@ -1,0 +1,188 @@
+{
+  "bbbp": {
+    "baseline_method": "chemberta_solo",
+    "baseline_selection": "post_hoc_highest_mean_auc",
+    "multiple_comparison_correction": null,
+    "note": "Baseline dipilih POST-HOC (mean AUC tertinggi). TANPA koreksi multiple comparison (Audit R3#6) \u2014 dicatat eksplisit.",
+    "comparisons": {
+      "random": {
+        "t_stat": -18.511831171470025,
+        "p_value": 1.7937416242326078e-08,
+        "cohens_d": -5.85395501623483,
+        "n": 10
+      },
+      "majority_class": {
+        "t_stat": -53.39961703847525,
+        "p_value": 1.423733626517035e-12,
+        "cohens_d": -16.886441602231702,
+        "n": 10
+      },
+      "ecfp_rf": {
+        "t_stat": -2.942903297702521,
+        "p_value": 0.016409107716711592,
+        "cohens_d": -0.9306277354360534,
+        "n": 10
+      },
+      "chemberta_tta_solo": {
+        "t_stat": -7.9553165664985,
+        "p_value": 2.3147182431835857e-05,
+        "cohens_d": -2.5156919857805624,
+        "n": 10
+      },
+      "dmpnn_solo": {
+        "t_stat": -18.387633866086496,
+        "p_value": 1.9030723475387634e-08,
+        "cohens_d": -5.8146803798080855,
+        "n": 10
+      },
+      "ensemble_avg": {
+        "t_stat": 3.5499950709546617,
+        "p_value": 0.006215940335761898,
+        "cohens_d": 1.1226070106587787,
+        "n": 10
+      },
+      "ensemble_weighted": {
+        "t_stat": 3.718238851752512,
+        "p_value": 0.004783632306866815,
+        "cohens_d": 1.1758103656067096,
+        "n": 10
+      },
+      "ensemble_weighted_tta": {
+        "t_stat": -1.807634964343786,
+        "p_value": 0.10412425722422732,
+        "cohens_d": -0.5716243665483619,
+        "n": 10
+      },
+      "ensemble_stacking": {
+        "t_stat": -1.070818800694705,
+        "p_value": 0.31212570701597087,
+        "cohens_d": -0.3386226371525162,
+        "n": 10
+      }
+    }
+  },
+  "bace": {
+    "baseline_method": "ecfp_rf",
+    "baseline_selection": "post_hoc_highest_mean_auc",
+    "multiple_comparison_correction": null,
+    "note": "Baseline dipilih POST-HOC (mean AUC tertinggi). TANPA koreksi multiple comparison (Audit R3#6) \u2014 dicatat eksplisit.",
+    "comparisons": {
+      "random": {
+        "t_stat": -14.373347755439172,
+        "p_value": 1.633303900870271e-07,
+        "cohens_d": -4.545251650885661,
+        "n": 10
+      },
+      "majority_class": {
+        "t_stat": -331.50218866015547,
+        "p_value": 1.0528045007944826e-19,
+        "cohens_d": -104.8301965496933,
+        "n": 10
+      },
+      "chemberta_solo": {
+        "t_stat": -12.359744269173676,
+        "p_value": 5.984673874127712e-07,
+        "cohens_d": -3.908494318780207,
+        "n": 10
+      },
+      "chemberta_tta_solo": {
+        "t_stat": -18.09677381422673,
+        "p_value": 2.1891970831669886e-08,
+        "cohens_d": -5.72270235538493,
+        "n": 10
+      },
+      "dmpnn_solo": {
+        "t_stat": -16.62558005435495,
+        "p_value": 4.6019295956381084e-08,
+        "cohens_d": -5.257470039322765,
+        "n": 10
+      },
+      "ensemble_avg": {
+        "t_stat": -9.335509771681739,
+        "p_value": 6.322699858046808e-06,
+        "cohens_d": -2.952147399727277,
+        "n": 10
+      },
+      "ensemble_weighted": {
+        "t_stat": -9.039463367299124,
+        "p_value": 8.237745465015596e-06,
+        "cohens_d": -2.858529306632046,
+        "n": 10
+      },
+      "ensemble_weighted_tta": {
+        "t_stat": -12.638679684169636,
+        "p_value": 4.944633961822084e-07,
+        "cohens_d": -3.996701441927359,
+        "n": 10
+      },
+      "ensemble_stacking": {
+        "t_stat": 0.11309464755332822,
+        "p_value": 0.912438016746902,
+        "cohens_d": 0.035763667744250625,
+        "n": 10
+      }
+    }
+  },
+  "clintox": {
+    "baseline_method": "chemberta_solo",
+    "baseline_selection": "post_hoc_highest_mean_auc",
+    "multiple_comparison_correction": null,
+    "note": "Baseline dipilih POST-HOC (mean AUC tertinggi). TANPA koreksi multiple comparison (Audit R3#6) \u2014 dicatat eksplisit.",
+    "comparisons": {
+      "random": {
+        "t_stat": -27.76602379393121,
+        "p_value": 4.950232039588177e-10,
+        "cohens_d": -8.780387675525233,
+        "n": 10
+      },
+      "majority_class": {
+        "t_stat": -631.0270002512921,
+        "p_value": 3.209217830099242e-22,
+        "cohens_d": -199.54825858577274,
+        "n": 10
+      },
+      "ecfp_rf": {
+        "t_stat": -79.6808660962933,
+        "p_value": 3.9099184121335264e-14,
+        "cohens_d": -25.197302279917633,
+        "n": 10
+      },
+      "chemberta_tta_solo": {
+        "t_stat": NaN,
+        "p_value": NaN,
+        "cohens_d": 0.0,
+        "n": 10
+      },
+      "dmpnn_solo": {
+        "t_stat": -9.385166202047367,
+        "p_value": 6.052371974714023e-06,
+        "cohens_d": -2.9678501417701706,
+        "n": 10
+      },
+      "ensemble_avg": {
+        "t_stat": -7.336744458187364,
+        "p_value": 4.388869010363367e-05,
+        "cohens_d": -2.320082309849006,
+        "n": 10
+      },
+      "ensemble_weighted": {
+        "t_stat": -5.938839681604931,
+        "p_value": 0.00021832584285219917,
+        "cohens_d": -1.8780260052460764,
+        "n": 10
+      },
+      "ensemble_weighted_tta": {
+        "t_stat": -5.938839681604931,
+        "p_value": 0.00021832584285219917,
+        "cohens_d": -1.8780260052460764,
+        "n": 10
+      },
+      "ensemble_stacking": {
+        "t_stat": 3.0788047100019407,
+        "p_value": 0.013165361049322897,
+        "cohens_d": 0.9736035354460323,
+        "n": 10
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+model,approx_n_params_or_trees,forward_pass_per_molecule,note
+ecfp_rf,500,1,"500 pohon RF, CPU, n_jobs=-1; tidak ada log wall-clock per-run tersimpan."
+chemberta_solo,77M,1,"fine-tune penuh (bukan freeze), 10 epoch max, early-stop patience 5; tidak ada log wall-clock per-run tersimpan."
+chemberta_tta_solo,77M,20,"20x forward pass (n_variants) per molekul dibanding chemberta_solo -> ~20x biaya inferensi, TANPA retraining tambahan."
+dmpnn,318K,1,dari log chemprop: 'Total params: 318K' (message_passing 227K + predictor 90.9K).

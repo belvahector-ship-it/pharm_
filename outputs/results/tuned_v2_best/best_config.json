@@ -1,0 +1,35 @@
+[
+  {
+    "dataset": "bbbp",
+    "best_method": "chemberta_solo",
+    "best_type": "individual",
+    "val_auc_selection": 0.9892,
+    "test_auc_mean": 0.7075,
+    "test_auc_std": 0.0117,
+    "bootstrap_ci_low": 0.6152,
+    "bootstrap_ci_high": 0.759,
+    "tta_gated_off": false
+  },
+  {
+    "dataset": "bace",
+    "best_method": "ecfp_rf",
+    "best_type": "individual",
+    "val_auc_selection": 0.7238,
+    "test_auc_mean": 0.8679,
+    "test_auc_std": 0.0033,
+    "bootstrap_ci_low": 0.7984,
+    "bootstrap_ci_high": 0.9219,
+    "tta_gated_off": false
+  },
+  {
+    "dataset": "clintox",
+    "best_method": "weighted_cb_dmpnn",
+    "best_type": "ensemble",
+    "val_auc_selection": 0.9764,
+    "test_auc_mean": 0.9916,
+    "test_auc_std": 0.0031,
+    "bootstrap_ci_low": 0.983,
+    "bootstrap_ci_high": 1.0,
+    "tta_gated_off": true
+  }
+]

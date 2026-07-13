@@ -1,0 +1,20 @@
+{
+  "bbbp": {
+    "dataset": "bbbp",
+    "minority_ratio_val": 0.451,
+    "threshold": 0.15,
+    "tta_enabled": true
+  },
+  "bace": {
+    "dataset": "bace",
+    "minority_ratio_val": 0.4437,
+    "threshold": 0.15,
+    "tta_enabled": true
+  },
+  "clintox": {
+    "dataset": "clintox",
+    "minority_ratio_val": 0.0405,
+    "threshold": 0.15,
+    "tta_enabled": false
+  }
+}
