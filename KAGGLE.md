@@ -1,6 +1,6 @@
 # Panduan Menjalankan di Kaggle (clone dari GitHub)
 
-Alur: kode di **GitHub** → `git clone` di **Kaggle Notebook (GPU T4 ×2)** → jalankan pipeline.
+Alur: kode di **GitHub** → `git clone` di **Kaggle Notebook (GPU, T4 x1 cukup)** → jalankan pipeline.
 
 ## Artefak: auto-reuse / auto-reset (tanpa flag manual)
 Pipeline menyimpan penanda `outputs/.pipeline_version`. Saat `01_prepare_data` jalan:
@@ -14,7 +14,7 @@ Notebook utama **selalu full run** (3 dataset × 5 seed) — cukup **Run All**.
 
 ## 0. Setelan Notebook Kaggle
 Di panel kanan notebook Kaggle:
-- **Accelerator** → `GPU T4 x2` (wajib, agar ChemBERTa & D-MPNN paralel di 2 GPU).
+- **Accelerator** → `GPU` (T4 x1 sudah cukup — `main_stabil.ipynb` menjalankan ChemBERTa & D-MPNN sekuensial di GPU yang sama, bukan paralel di 2 GPU).
 - **Internet** → `On` (wajib: untuk clone GitHub, download checkpoint HuggingFace &
   CSV mentah MoleculeNet dari S3 `deepchemdata`).
 
@@ -101,7 +101,7 @@ Hasil:
 | `ERROR: No matching distribution found for chemprop==1.7.1` | Chemprop 1.x tak ada utk Python modern → pakai `pip install "chemprop>=2.1,<3.0"` (sudah default di requirements.txt & notebook) |
 | Chemprop error argumen CLI (`--data_path` dst tak dikenal) | Itu sintaks chemprop 1.x (underscore). Chemprop 2.x pakai dash: `--data-path`, `chemprop train`/`chemprop predict` sbg entrypoint. Pastikan versi terpasang `>=2.1` (`python -c "import chemprop; print(chemprop.__version__)"`). |
 | Checkpoint HuggingFace gagal diunduh | Internet Notebook belum `On` |
-| Hanya 1 GPU terpakai | Accelerator belum `GPU T4 x2`; cek `import torch; torch.cuda.device_count()` harus 2 |
+| `torch.cuda.device_count()` = 0 | Accelerator belum diaktifkan; set ke `GPU` di panel kanan (T4 x1 sudah cukup, `main_stabil.ipynb` tak butuh 2 GPU) |
 | `ValueError: setting an array element with a sequence... inhomogeneous shape` saat Fase 1 | Bug lama: featurizer `Raw` DeepChem crash pada SMILES invalid. Sudah diperbaiki — `data_loader.py` kini download CSV mentah langsung (tanpa DeepChem). Pastikan repo di Kaggle sudah `git pull`/re-clone versi terbaru. |
 | Dataset MoleculeNet gagal load | Butuh Internet `On` (download CSV dari S3); atau taruh CSV manual di `data/raw/{dataset}.csv` sesuai `DATASET_SCHEMA` |
 | Sel clone terlihat "macet" (running terus, tidak selesai) | Repo **private** & clone jalan tanpa token → git menunggu prompt `Username`/`Password` di terminal, yang tidak bisa dijawab dari sel notebook. **Solusi**: buat GH_TOKEN (langkah di §1) & simpan sebagai Secret Kaggle, lalu Stop sel yang macet dan Run ulang. `notebooks/kaggle_bootstrap.ipynb` versi terbaru sudah otomatis pakai `GH_TOKEN` bila ada, dan gagal cepat (bukan menggantung) bila tidak ada. |

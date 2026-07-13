@@ -78,7 +78,7 @@ CHEMBERTA = {
     "lr": 2e-5,
     "epochs": 10,
     "early_stopping_patience": 5,      # Audit R2#11
-    "gpu_id": 0,                       # Kaggle T4x2: ChemBERTa di GPU 0
+    "gpu_id": 0,                       # GPU tunggal (lihat DMPNN["gpu_id"] di bawah)
 }
 
 DMPNN = {
@@ -89,7 +89,11 @@ DMPNN = {
     "lr": 1e-3,
     "early_stopping_patience": 5,      # Audit R2#11
     "use_rdkit_2d_features": False,    # Audit R2#10: sengaja pure-graph
-    "gpu_id": 1,                       # Kaggle T4x2: D-MPNN di GPU 1 (paralel dgn ChemBERTa)
+    # 1 GPU SAJA (bukan T4x2): ChemBERTa & D-MPNN sama2 target gpu_id=0. Aman krn
+    # main_stabil.ipynb menjalankan SEKUENSIAL (bukan paralel Popen) -- tak ada
+    # perebutan GPU. Dulu di-set 1 (asumsi 2 GPU paralel di notebook lama yg sudah
+    # dihapus); diubah supaya jalan di environment T4 x1 (mis. Kaggle non-x2, Colab).
+    "gpu_id": 0,
 }
 
 RF = {
