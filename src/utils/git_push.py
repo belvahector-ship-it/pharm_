@@ -77,10 +77,35 @@ def push_results(stage_label: str, repo_owner: str, repo_name: str) -> bool:
         pass
     push_target = (f"https://{token}@github.com/{repo_owner}/{repo_name}.git"
                    if token else "origin")
-    rc = _git("push", push_target, "HEAD:main")
-    if rc == 0:
-        print(f"[push:{stage_label}] OK -> outputs/results/ ter-push ke GitHub (permanen).")
-        return True
-    print(f"[push:{stage_label}] push GAGAL (lihat pesan di atas) -- commit tetap "
-          f"tersimpan LOKAL di sesi ini, tak hilang, tinggal push manual nanti.")
+
+    # Fix nyata: push ditolak ("fetch first") krn remote maju duluan (mis. sesi lain, atau
+    # commit perbaikan kode yang di-push terpisah dari sesi Kaggle ini) -- SEBELUMNYA ini
+    # membuat commit hasil eksperimen macet permanen LOKAL, tak pernah sampai GitHub, padahal
+    # bisa direkonsiliasi otomatis (commit kita HANYA menyentuh outputs/results/, nyaris tak
+    # pernah tumpang tindih dgn commit kode di tempat lain). Coba fetch+rebase max 3x sebelum
+    # menyerah; kalau ADA konflik file yang SAMA, utamakan versi LOKAL (-X theirs, semantik
+    # rebase: "theirs"=commit yg di-replay=lokal) krn itu hasil eksperimen Kaggle yg nyata,
+    # bukan artefak uji coba di tempat lain.
+    for attempt in range(3):
+        rc = _git("push", push_target, "HEAD:main")
+        if rc == 0:
+            print(f"[push:{stage_label}] OK -> outputs/results/ ter-push ke GitHub (permanen)."
+                 + (f" (setelah {attempt} kali rebase)" if attempt else ""))
+            return True
+
+        print(f"[push:{stage_label}] push ditolak (percobaan {attempt+1}/3) -- coba "
+              f"fetch+rebase lalu ulangi...", flush=True)
+        if _git("fetch", push_target, "main") != 0:
+            print(f"[push:{stage_label}] fetch gagal, tak bisa rekonsiliasi otomatis.")
+            break
+        if _git("rebase", "-X", "theirs", "FETCH_HEAD") != 0:
+            print(f"[push:{stage_label}] rebase GAGAL (kemungkinan konflik nyata) -> "
+                  f"dibatalkan, commit tetap aman LOKAL.")
+            _git("rebase", "--abort")
+            break
+
+    print(f"[push:{stage_label}] push tetap GAGAL setelah retry (lihat pesan di atas) -- "
+          f"commit tetap tersimpan LOKAL di sesi ini, TIDAK hilang. Tinggal push manual nanti "
+          f"(`git push origin HEAD:main` di Console notebook) atau biarkan tahap berikutnya "
+          f"coba lagi (push_results dipanggil ulang tiap tahap).")
     return False
