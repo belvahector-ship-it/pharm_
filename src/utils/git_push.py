@@ -41,6 +41,27 @@ def push_results(stage_label: str, repo_owner: str, repo_name: str) -> bool:
         print(f"[push:{stage_label}] tidak ada perubahan baru di outputs/results/ -> skip.")
         return True
 
+    # PENJAGA (fix insiden nyata): pernah terjadi outputs/results/ (32 file: FINAL_REPORT.md,
+    # tuned_v1/, tuned_v2_best/, posthoc/) terhapus otomatis oleh bug lain (lihat config.py
+    # refresh_artifacts_if_stale) lalu ke-COMMIT di sini sbg "hasil run" -- untung push
+    # ditolak GitHub (di belakang origin), commit RUSAK tsb tetap tersimpan lokal. Sebagai
+    # lapis pertahanan KEDUA (independen dari fix di config.py): batalkan commit kalau staged
+    # diff didominasi PENGHAPUSAN tanpa penambahan sepadan -- itu ciri khas wipe tak sengaja,
+    # BUKAN hasil eksperimen baru yang wajar (hasil baru selalu berupa file BARU/DIUBAH).
+    status_out = subprocess.run(["git", "diff", "--cached", "--name-status"],
+                                capture_output=True, text=True).stdout
+    n_deleted = sum(1 for ln in status_out.splitlines() if ln.startswith("D\t"))
+    n_added_or_modified = sum(1 for ln in status_out.splitlines()
+                              if ln.startswith(("A\t", "M\t")))
+    if n_deleted >= 1 and n_added_or_modified == 0:
+        _git("reset")  # un-stage supaya tak tersangkut di index sesi ini
+        print(f"[push:{stage_label}] !! DIBATALKAN: staged diff berisi {n_deleted} file "
+              f"DIHAPUS dan 0 file ditambah/diubah -- ini ciri khas outputs/results/ ke-wipe "
+              f"TAK SENGAJA (bukan hasil eksperimen baru yang wajar). TIDAK di-commit.\n"
+              f"    Cek manual: `git status` / `git diff --cached` di sesi ini sebelum "
+              f"melanjutkan. Kalau penghapusan ini memang disengaja, commit manual sendiri.")
+        return False
+
     code_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                               capture_output=True, text=True).stdout.strip()
     msg = f"Hasil run Kaggle [{stage_label}] {datetime.datetime.now():%Y-%m-%d %H:%M} (kode @ {code_sha})"

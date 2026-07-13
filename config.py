@@ -250,6 +250,22 @@ def _write_version_marker() -> None:
         f.write(PIPELINE_VERSION)
 
 
+def _dir_has_real_content(path: str) -> bool:
+    """True bila direktori berisi file SELAIN placeholder git (.gitkeep dkk).
+
+    BUG FATAL yang diperbaiki di sini: cek lama `os.listdir(d)` menganggap direktori
+    "berisi" hanya karena ada `.gitkeep` (satu-satunya isi folder gitignored SETELAH clone
+    baru) -> `has_any` SELALU True di clone Kaggle yang benar2 baru -> status="stale" ->
+    outputs/results/ (yang JUSTRU baru saja di-clone lengkap dari git: FINAL_REPORT.md,
+    tuned_v1/, tuned_v2_best/, posthoc/, dll) ikut DIHAPUS oleh refresh_artifacts_if_stale().
+    Ini BUKAN skenario hipotetis -- sudah terjadi 2x (sekali di sesi lokal, sekali di sesi
+    Kaggle asli user, sampai ke-commit sbg 32 file dihapus, untung push ditolak GitHub).
+    """
+    if not os.path.isdir(path):
+        return False
+    return any(not name.startswith(".") for name in os.listdir(path))
+
+
 def artifacts_status() -> tuple[str, str | None]:
     """Status artefak vs PIPELINE_VERSION: ('fresh'|'stale'|'empty', versi_tersimpan).
 
@@ -261,10 +277,9 @@ def artifacts_status() -> tuple[str, str | None]:
         with open(VERSION_MARKER, encoding="utf-8") as f:
             stored = f.read().strip()
         return ("fresh" if stored == PIPELINE_VERSION else "stale", stored)
-    has_any = any(
-        os.path.isdir(PATHS[k]) and os.listdir(PATHS[k])
-        for k in ("splits", "predictions", "checkpoints")
-    )
+    # HANYA cek artefak yang MEMANG regenerable/gitignored (splits/predictions/checkpoints).
+    # "results" SENGAJA TIDAK dicek di sini -- lihat catatan di refresh_artifacts_if_stale().
+    has_any = any(_dir_has_real_content(PATHS[k]) for k in ("splits", "predictions", "checkpoints"))
     return ("stale" if has_any else "empty", None)
 
 
@@ -274,18 +289,26 @@ def refresh_artifacts_if_stale(verbose: bool = True) -> str:
     Dipanggil di awal Fase 1. Menjawab "kenapa harus reset tiap run?" -> tidak perlu:
     kalau versi cocok, artefak dipakai ulang (training resume/skip). Reset otomatis HANYA
     saat versi berubah (kode breaking) atau ada artefak lama tanpa marker.
+
+    PENTING: "outputs/results/" TIDAK PERNAH dihapus di sini, sengaja. Folder itu satu2nya
+    yang git-track (bukan gitignored) -- isinya "buku catatan permanen" hasil eksperimen
+    lintas sesi (FINAL_REPORT.md, tuned_v1/, tuned_v2_best/, posthoc/, dll), BUKAN cache
+    yang boleh dianggap "basi" & dibuang otomatis berdasar heuristik versi pipeline. Kalau
+    sebuah tahap perlu menulis hasil baru, ia cukup menimpa file spesifiknya sendiri --
+    tidak pernah perlu direktori ini kosong dulu.
     """
     ensure_dirs()
     status, stored = artifacts_status()
     if status == "stale":
-        for key in ("splits", "predictions", "checkpoints", "results"):
+        for key in ("splits", "predictions", "checkpoints"):  # BUKAN "results" -- lihat docstring
             d = PATHS[key]
             if os.path.isdir(d):
                 shutil.rmtree(d, ignore_errors=True)
             os.makedirs(d, exist_ok=True)
         if verbose:
             print(f"[versi] artefak basi (tersimpan={stored!r} != {PIPELINE_VERSION!r}) "
-                  f"-> dibersihkan otomatis.")
+                  f"-> splits/predictions/checkpoints dibersihkan otomatis "
+                  f"(outputs/results/ TIDAK disentuh -- itu catatan permanen).")
     elif status == "fresh":
         if verbose:
             print(f"[versi] artefak valid (versi {PIPELINE_VERSION}) -> dipakai ulang "
