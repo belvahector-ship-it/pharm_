@@ -23,6 +23,8 @@ outputs/logs/*
 !outputs/**/.gitkeep
 # Figure kalibrasi hasil analisis mendalam: kecil (<100KB) & penting utk laporan -> ditrack.
 !outputs/figures/calibration_*.png
+# Figure diagnostik TTA (Fig. 1 paper): kecil & penting, regenerate via scripts/make_fig1.py.
+!outputs/figures/fig1_*.png
 
 # --- Model / artefak besar ---
 *.pt
@@ -38,3 +40,7 @@ hasil_outputs.zip
 Thumbs.db
 .vscode/
 .idea/
+
+# --- Dokumen peneliti (draft paper, audit, log) — LOKAL saja, tidak di-push ---
+docs/
+trash/

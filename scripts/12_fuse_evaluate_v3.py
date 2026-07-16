@@ -44,6 +44,15 @@ ROW_TO_MODEL_V3 = {
     "chemberta_v3_solo": "chemberta_v3", "dmpnn_v3_solo": "dmpnn_v3",
     "chemberta_tta_igate": "chemberta_tta_igate", "chemberta_v3_tta_igate": "chemberta_v3_tta_igate",
 }
+# Nama tampilan baseline (dari significance.json / scripts/05) -> prefix file prediksi.
+# Tanpa peta ini, auc_per_seed("chemberta_solo", ...) mencari file `chemberta_solo_*.npy`
+# yang tidak ada (file sebenarnya `chemberta_*.npy`) -> FileNotFoundError -> NaN semua seed
+# -> compare_vs_reference dapat n=0 (bug signifikansi Category C yang menghasilkan NaN).
+# Sama dgn ROW_TO_MODEL di scripts/05_evaluate.py & scripts/09_posthoc_analysis.py.
+DISPLAY_TO_MODEL = {
+    "ecfp_rf": "rf", "chemberta_solo": "chemberta",
+    "chemberta_tta_solo": "chemberta_tta", "dmpnn_solo": "dmpnn",
+}
 ENSEMBLE_V3_COMPONENTS = ["rf", "chemberta_v3_tta_igate", "dmpnn_v3"]
 
 
@@ -84,7 +93,8 @@ def build_ensemble_v3(dataset, seed):
 
 def auc_per_seed(dataset, row, seeds):
     y_true = _labels_2d(dataset, "test")
-    model = ROW_TO_MODEL_V3.get(row, row)
+    # v3 row -> model; kalau bukan, coba peta nama-tampilan baseline; kalau bukan juga, apa adanya.
+    model = ROW_TO_MODEL_V3.get(row) or DISPLAY_TO_MODEL.get(row, row)
     vals = []
     for seed in seeds:
         try:
@@ -157,8 +167,17 @@ def main():
             print(f"  [warn] {dataset}: significance.json (tes1) tak ditemukan, lewati referensi ini")
         try:
             v2 = pd.read_csv(os.path.join(config.PATHS["results"], "tuned_v2_best", "final_table_best.csv"))
-            v2_method = v2.loc[v2["dataset"] == dataset, "method"].iloc[0]
-            ref_names_aucs[f"tuned_v2_best({v2_method})"] = auc_per_seed(dataset, v2_method, args.seeds)
+            # NB: kolomnya "best_method" (bukan "method"); beberapa config terbaik (mis. clintox
+            # "weighted_cb_dmpnn") adalah komposit tanpa file prediksi tunggal, jadi tak selalu
+            # bisa direkonstruksi sbg referensi per-seed. Hanya tambahkan bila prediksinya ada
+            # (>=2 seed valid) supaya tidak memunculkan baris n=0 yang menyesatkan.
+            v2_method = v2.loc[v2["dataset"] == dataset, "best_method"].iloc[0]
+            v2_auc = auc_per_seed(dataset, v2_method, args.seeds)
+            if int(np.sum(np.isfinite(v2_auc))) >= 2:
+                ref_names_aucs[f"tuned_v2_best({v2_method})"] = v2_auc
+            else:
+                print(f"  [info] {dataset}: tuned_v2_best '{v2_method}' tak punya prediksi tunggal "
+                      f"(komposit) -> referensi ini dilewati")
         except (FileNotFoundError, IndexError, KeyError):
             print(f"  [warn] {dataset}: tuned_v2_best tak ditemukan, lewati referensi ini")
 

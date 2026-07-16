@@ -1,0 +1,13 @@
+dataset,method,keterangan,fixed_baseline,auc_method,auc_fixed_baseline,delta_vs_fixed,p_ttest,cohens_d
+bbbp,chemberta_tta_igate,Kategori B: gate instans (backbone lama),chemberta,0.7075,0.7075,-0.0,0.67831,-0.1355
+bbbp,chemberta_v3,Kategori C: Focal+EMA,chemberta,0.7073,0.7075,-0.0002,0.343436,-0.3162
+bbbp,dmpnn_v3,Kategori C: MCC-loss (D-MPNN),chemberta,0.6261,0.7075,-0.0814,0.0,-5.8147
+bbbp,ensemble_v3_weighted,Kategori C: ensemble v3 weighted,chemberta,0.7203,0.7075,0.0128,0.003723,1.2275
+bace,chemberta_tta_igate,Kategori B: gate instans (backbone lama),chemberta,0.7774,0.7921,-0.0147,0.003894,-1.2181
+bace,chemberta_v3,Kategori C: Focal+EMA,chemberta,0.7921,0.7921,0.0,,0.0
+bace,dmpnn_v3,Kategori C: MCC-loss (D-MPNN),chemberta,0.7657,0.7921,-0.0264,0.002006,-1.3581
+bace,ensemble_v3_weighted,Kategori C: ensemble v3 weighted,chemberta,0.8435,0.7921,0.0514,1e-06,3.6055
+clintox,chemberta_tta_igate,Kategori B: gate instans (backbone lama),chemberta,0.9851,0.9851,0.0,,0.0
+clintox,chemberta_v3,Kategori C: Focal+EMA,chemberta,0.9806,0.9851,-0.0045,0.014791,-0.9508
+clintox,dmpnn_v3,Kategori C: MCC-loss (D-MPNN),chemberta,0.6454,0.9851,-0.3397,3e-06,-3.2201
+clintox,ensemble_v3_weighted,Kategori C: ensemble v3 weighted,chemberta,0.9211,0.9851,-0.064,1e-06,-3.8128

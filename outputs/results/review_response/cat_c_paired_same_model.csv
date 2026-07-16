@@ -1,0 +1,16 @@
+dataset,komponen,model_v3,model_base,auc_base,auc_v3,delta,p_ttest,p_wilcoxon,cohens_d,n
+bbbp,Focal Loss (ChemBERTa),chemberta_v3,chemberta,0.7075,0.7073,-0.0002,0.343436,1.0,-0.3162,10
+bbbp,"MCC-loss (D-MPNN, pengganti)",dmpnn_v3,dmpnn,0.6261,0.6261,0.0,,,0.0,10
+bbbp,Gate instans penuh (v3),chemberta_v3_tta_igate,chemberta,0.7075,0.7073,-0.0003,0.325431,0.5,-0.3289,10
+bbbp,Ensemble v3 (avg),ensemble_v3_avg,ensemble_avg,0.7194,0.7196,0.0002,0.343436,1.0,0.3162,10
+bbbp,Ensemble v3 (weighted),ensemble_v3_weighted,ensemble_weighted,0.72,0.7203,0.0003,0.343436,1.0,0.3162,10
+bace,Focal Loss (ChemBERTa),chemberta_v3,chemberta,0.7921,0.7921,0.0,,,0.0,10
+bace,"MCC-loss (D-MPNN, pengganti)",dmpnn_v3,dmpnn,0.7657,0.7657,0.0,,,0.0,10
+bace,Gate instans penuh (v3),chemberta_v3_tta_igate,chemberta,0.7921,0.7766,-0.0155,0.001875,0.003906,-1.3728,10
+bace,Ensemble v3 (avg),ensemble_v3_avg,ensemble_avg,0.8422,0.8414,-0.0009,0.314287,0.492188,-0.337,10
+bace,Ensemble v3 (weighted),ensemble_v3_weighted,ensemble_weighted,0.8443,0.8435,-0.0008,0.375647,0.556641,-0.2947,10
+clintox,Focal Loss (ChemBERTa),chemberta_v3,chemberta,0.9851,0.9806,-0.0045,0.014791,0.013672,-0.9508,10
+clintox,"MCC-loss (D-MPNN, pengganti)",dmpnn_v3,dmpnn,0.8094,0.6454,-0.164,0.005336,0.009766,-1.1535,10
+clintox,Gate instans penuh (v3),chemberta_v3_tta_igate,chemberta,0.9851,0.982,-0.0031,0.028538,0.048828,-0.8235,10
+clintox,Ensemble v3 (avg),ensemble_v3_avg,ensemble_avg,0.9789,0.8934,-0.0855,4.9e-05,0.001953,-2.2865,10
+clintox,Ensemble v3 (weighted),ensemble_v3_weighted,ensemble_weighted,0.9796,0.9211,-0.0585,1e-06,0.001953,-3.5405,10

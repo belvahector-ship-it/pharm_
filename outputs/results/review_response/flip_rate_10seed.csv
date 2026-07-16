@@ -1,0 +1,5 @@
+dataset,task,prevalence_class0,prevalence_class1,minority_class,minority_prevalence,flip_rate_class0_mean,flip_rate_class1_mean,flip_rate_minority_mean,flip_rate_majority_mean,n_seed
+bbbp,p_np,0.4755,0.5245,0,0.4755,0.232,0.2262,0.232,0.2262,10
+bace,Class,0.3947,0.6053,0,0.3947,0.1,0.2783,0.1,0.2783,10
+clintox,FDA_APPROVED,0.0608,0.9392,0,0.0608,0.8889,0.023,0.8889,0.023,10
+clintox,CT_TOX,0.9324,0.0676,1,0.0676,0.0116,0.89,0.89,0.0116,10
