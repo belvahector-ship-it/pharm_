@@ -1,0 +1,4 @@
+backbone,dataset,n_seed,auc_solo,auc_binary_gate,gate_disagree,p_disagree_vs_bin,d_disagree_vs_bin,gate_std,p_std_vs_bin,d_std_vs_bin,gate_iqr,p_iqr_vs_bin,d_iqr_vs_bin
+chemberta,bace,10,0.7921,0.7589,0.7851,0.0046,1.182,0.7776,0.019,0.902,0.7767,0.034,0.79
+chemberta,bbbp,10,0.7075,0.6666,0.7093,0.0,2.696,0.7073,0.0,2.493,0.7063,0.0,2.325
+chemberta,clintox,10,0.9851,0.9851,0.9862,0.0337,0.791,0.9851,,0.0,0.9851,,0.0
