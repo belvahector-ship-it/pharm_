@@ -1,0 +1,15 @@
+# Ensembling vs baseline — verifikasi ulang (10 seed, dari prediksi tersimpan)
+
+Inference-level (tanpa retrain). `weighted_cb_dmpnn` = komposit tuned_v2 direkonstruksi (val-AUC-weighted avg ChemBERTa-solo + D-MPNN). Baseline post-hoc per dataset: BBBP/ClinTox ChemBERTa, BACE ECFP+RF.
+
+| dataset   | baseline   | ensemble          |   auc_baseline |   auc_ensemble |   delta |   p_ttest |   cohens_d | improves_sig_0.05   |
+|:----------|:-----------|:------------------|---------------:|---------------:|--------:|----------:|-----------:|:--------------------|
+| bbbp      | chemberta  | ensemble_avg      |         0.7075 |         0.7194 |  0.0119 |    0.0062 |      1.123 | True                |
+| bbbp      | chemberta  | ensemble_weighted |         0.7075 |         0.72   |  0.0125 |    0.0048 |      1.176 | True                |
+| bbbp      | chemberta  | weighted_cb_dmpnn |         0.7075 |         0.7039 | -0.0036 |    0.1976 |     -0.44  | False               |
+| bace      | rf         | ensemble_avg      |         0.8679 |         0.8422 | -0.0257 |    0      |     -2.952 | False               |
+| bace      | rf         | ensemble_weighted |         0.8679 |         0.8443 | -0.0237 |    0      |     -2.859 | False               |
+| bace      | rf         | weighted_cb_dmpnn |         0.8679 |         0.7951 | -0.0728 |    0      |     -5.767 | False               |
+| clintox   | chemberta  | ensemble_avg      |         0.9851 |         0.9789 | -0.0062 |    0      |     -2.32  | False               |
+| clintox   | chemberta  | ensemble_weighted |         0.9851 |         0.9796 | -0.0056 |    0.0002 |     -1.878 | False               |
+| clintox   | chemberta  | weighted_cb_dmpnn |         0.9851 |         0.9916 |  0.0065 |    0      |      2.288 | True                |
