@@ -57,7 +57,7 @@ Bonferroni, Wilcoxon), and the underlying per-seed predictions are in
 ## Paper
 
 The manuscript (IEEE two-column format, prepared for ICACSIS 2026) is in
-[`PRESENTASI/`](PRESENTASI/) together with a full academic audit report. Reproducing
+[`docs/`](docs/) together with a full academic audit report. Reproducing
 Fig. 1 and Tables II–V from raw predictions is done via `scripts/06_make_plots.py` and
 `scripts/05_evaluate.py` / `scripts/08_evaluate_best.py`.
 
