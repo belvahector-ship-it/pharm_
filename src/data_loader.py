@@ -111,6 +111,50 @@ def scaffold_split_indices(smiles_list: list[str], ratios=(0.8, 0.1, 0.1),
     return {"train": sorted(train_idx), "val": sorted(val_idx), "test": sorted(test_idx)}
 
 
+def scaffold_balanced_split_indices(smiles_list: list[str], ratios=(0.8, 0.1, 0.1),
+                                    seed: int = 1) -> dict[str, list[int]]:
+    """Scaffold split ACAK-terkendali ("scaffold_balanced", Chemprop / Yang et al. 2019).
+
+    ALASAN ADANYA FUNGSI INI (B2 revisi jurnal): `scaffold_split_indices()` di atas
+    DETERMINISTIK dan mengabaikan `seed` — jadi tidak bisa dipakai untuk menghasilkan split
+    tambahan. Padahal keberatan reviewer terbesar adalah "semua temuan dari SATU split".
+    Fungsi ini menghasilkan split yang benar-benar berbeda per `seed`, TAPI tetap:
+      - tidak pernah memecah satu grup scaffold antar fold -> nol kebocoran scaffold;
+      - menaruh grup besar di train supaya val/test tidak didominasi satu kerangka
+        (itulah arti "balanced"), sehingga val/test tetap beragam secara struktural.
+
+    Ini protokol standar & citable (ref [5] paper), bukan skema buatan sendiri.
+    """
+    n_total = len(smiles_list)
+    n_train = int(ratios[0] * n_total)
+    n_val = int(ratios[1] * n_total)
+
+    scaffold_to_idx = generate_scaffold_groups(smiles_list)
+    groups = list(scaffold_to_idx.values())
+
+    # Grup "besar" (> setengah kuota val/test) dipaksa ke train; sisanya di-permutasi acak.
+    big_cutoff = max(n_val // 2, 1)
+    big = [g for g in groups if len(g) > big_cutoff]
+    small = [g for g in groups if len(g) <= big_cutoff]
+
+    rng = np.random.RandomState(seed)
+    rng.shuffle(small)
+    ordered = big + small          # grup besar selalu duluan -> masuk train
+
+    train_idx: list[int] = []
+    val_idx: list[int] = []
+    test_idx: list[int] = []
+    for group in ordered:
+        if len(train_idx) + len(group) <= n_train:
+            train_idx += group
+        elif len(val_idx) + len(group) <= n_val:
+            val_idx += group
+        else:
+            test_idx += group
+
+    return {"train": sorted(train_idx), "val": sorted(val_idx), "test": sorted(test_idx)}
+
+
 # ---------------------------------------------------------------------------
 # Load raw -> DataFrame seragam
 # ---------------------------------------------------------------------------
@@ -180,13 +224,21 @@ def _drop_invalid_smiles(df: pd.DataFrame, dataset: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # API utama
 # ---------------------------------------------------------------------------
-def build_split(dataset: str, save: bool = True, force: bool = False) -> DatasetSplit:
+def build_split(dataset: str, save: bool = True, force: bool = False,
+                split_seed: int = 0) -> DatasetSplit:
     """Bangun (atau muat) scaffold split untuk satu dataset.
 
     Bila file split sudah ada di data/splits/, indeksnya dipakai ulang persis (fixed) —
     KECUALI `force=True` (dipakai 01_prepare_data untuk regenerasi bersih, mis. setelah
     algoritma splitter berubah). Script hilir (02-05) memanggil tanpa force -> reuse split
     yang sama persis di 3 jalur representasi.
+
+    `split_seed` (B2 revisi jurnal):
+      - 0 (DEFAULT)  -> jalur LAMA persis: splitter deterministik + file {dataset}_split.json.
+                        Tidak ada satu byte pun yang berubah untuk seluruh hasil existing.
+      - >=1          -> split replikasi via scaffold_balanced_split_indices(seed=split_seed),
+                        disimpan TERPISAH di {dataset}_split_s{n}.json supaya split utama
+                        tidak pernah tertimpa.
     """
     schema = config.DATASET_SCHEMA[dataset]
     label_cols = schema["label_cols"]
@@ -202,12 +254,17 @@ def build_split(dataset: str, save: bool = True, force: bool = False) -> Dataset
     smiles_all = df["smiles"].tolist()
     labels_all = df[label_cols].to_numpy(dtype=np.float32)  # (N, T), NaN = missing label
 
-    split_file = os.path.join(config.PATHS["splits"], f"{dataset}_split.json")
+    suffix = "" if split_seed == 0 else f"_s{split_seed}"
+    split_file = os.path.join(config.PATHS["splits"], f"{dataset}_split{suffix}.json")
     if os.path.exists(split_file) and not force:
         idx = io.load_json(split_file)
     else:
-        idx = scaffold_split_indices(
-            smiles_all, ratios=config.SPLIT["ratios"], seed=config.SPLIT["split_seed"])
+        if split_seed == 0:
+            idx = scaffold_split_indices(
+                smiles_all, ratios=config.SPLIT["ratios"], seed=config.SPLIT["split_seed"])
+        else:
+            idx = scaffold_balanced_split_indices(
+                smiles_all, ratios=config.SPLIT["ratios"], seed=split_seed)
         if save:
             io.save_json(idx, split_file)
 

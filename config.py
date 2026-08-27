@@ -187,6 +187,40 @@ STATISTICAL_TEST = {
 }
 
 # ---------------------------------------------------------------------------
+# B1 (revisi jurnal): train-time SMILES augmentation untuk ChemBERTa
+# ---------------------------------------------------------------------------
+# Reviewer wajar bertanya: collapse TTA di ClinTox itu efek imbalance, atau semata
+# distribution shift karena model DILATIH pada SMILES kanonik lalu DIUJI pada SMILES acak?
+# Varian "aug" menjawab itu: training set diperbanyak dengan enumerasi SMILES sehingga
+# model melihat penulisan acak SEJAK training. Kalau collapse hilang -> penyebabnya shift;
+# kalau tetap -> penyebabnya memang imbalance (klaim paper bertahan).
+#
+# HANYA dipakai model variant="aug" (chemberta_aug). variant="base"/"v3" TIDAK tersentuh,
+# jadi seluruh angka tes1/tuned_v1/tuned_v2/v3 yang sudah dilaporkan tetap identik.
+TRAIN_AUGMENT = {
+    "n_variants": 4,        # canonical + 3 penulisan acak per molekul (faktor 4x data)
+    "augment_val": False,   # validation TETAP kanonik -> early stopping comparable ke base
+    # Catatan fairness: dgn 4x data, 1 epoch = 4x gradient step. Untuk mengontrol itu,
+    # scripts/16 menyediakan --epochs (mis. 3, ~= jumlah step base pada 10 epoch).
+}
+
+# ---------------------------------------------------------------------------
+# B2 (revisi jurnal): scaffold split alternatif untuk uji replikasi lintas-split
+# ---------------------------------------------------------------------------
+# PENTING: scaffold_split_indices() bersifat DETERMINISTIK (algoritma DeepChem) dan
+# MENGABAIKAN seed -- jadi split_seed 1/2 dgn method itu menghasilkan split yang SAMA.
+# Untuk mendapat split yang benar-benar berbeda tapi tetap bebas kebocoran scaffold, kita
+# pakai protokol "scaffold_balanced" (Chemprop / Yang et al. 2019 = ref [5] paper):
+# grup scaffold di-permutasi acak dgn RNG(split_seed); grup besar (> setengah kuota val
+# atau test) dipaksa ke train agar val/test tidak didominasi satu kerangka.
+#
+# split_seed=0 SELALU memakai jalur deterministik lama -> split utama paper tidak berubah.
+SPLIT_ALT = {
+    "method": "scaffold_balanced",
+    "seeds": [1, 2],        # 2 split tambahan (di luar split utama seed 0)
+}
+
+# ---------------------------------------------------------------------------
 # Sanity baselines & tabel hasil
 # ---------------------------------------------------------------------------
 SANITY_BASELINES = ["random", "majority_class"]  # Audit R1#7

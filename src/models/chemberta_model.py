@@ -62,6 +62,10 @@ class ChemBERTaModel(BaseMolModel):
         self.variant = variant
         self.name = "chemberta" if variant == "base" else f"chemberta_{variant}"
         self.cfg = config.CHEMBERTA
+        # B1: hanya variant="aug" yang mengaugmentasi training set (lihat _augment_train).
+        # variant "base"/"v3" -> False, jadi perilaku lama tak tersentuh sama sekali.
+        self.augment_train = (variant == "aug")
+        self.augment_epochs = None   # override opsional dari scripts/16 (kontrol jumlah step)
         self._device = None
         self.net = None
         self.pos_weight = None
@@ -168,6 +172,47 @@ class ChemBERTaModel(BaseMolModel):
             ds = TensorDataset(input_ids, attn, torch.tensor(y, dtype=torch.float32))
         return DataLoader(ds, batch_size=self.cfg["batch_size"], shuffle=shuffle)
 
+    # ---------------- B1: train-time SMILES augmentation ----------------
+    def _augment_train(self, smiles, labels):
+        """Perbanyak training set dgn enumerasi SMILES (canonical + varian acak).
+
+        Dipakai HANYA bila variant="aug". Label direplikasi mengikuti tiap varian, jadi
+        distribusi kelas TIDAK berubah (rasio minoritas tetap) — ini penting supaya
+        eksperimen mengisolasi SATU faktor saja: apakah model pernah melihat penulisan
+        SMILES acak saat training. Kalau kita ikut mengubah rasio kelas, hasilnya jadi
+        rancu antara efek augmentasi dan efek resampling.
+
+        Validation TIDAK diaugmentasi (config.TRAIN_AUGMENT["augment_val"]=False) supaya
+        early stopping dibandingkan pada basis yang sama dgn model base.
+
+        Seed enumerasi diikat ke seed model (konsisten dgn Audit R2#7 di jalur TTA), tapi
+        di-offset per molekul agar tiap molekul dapat himpunan varian sendiri, bukan
+        pengulangan pola yang sama.
+        """
+        from src.preprocessing import enumeration
+
+        n_var = config.TRAIN_AUGMENT["n_variants"]
+        y = np.asarray(labels, dtype=np.float32)
+        if y.ndim == 1:
+            y = y[:, None]
+
+        out_smiles: list[str] = []
+        out_rows: list[int] = []
+        for i, smi in enumerate(smiles):
+            variants = enumeration.enumerate_smiles(
+                smi, n_variants=n_var, seed=self.seed * 100003 + i,
+                context=f"trainaug:{self.dataset}:{i}")
+            if len(variants) == 0:
+                variants = [smi]          # fallback: SMILES asli (Audit R1#5)
+            out_smiles.extend(variants)
+            out_rows.extend([i] * len(variants))
+
+        out_labels = y[out_rows]
+        print(f"[chemberta:aug] {self.dataset} seed={self.seed}: train {len(smiles)} -> "
+              f"{len(out_smiles)} SMILES ({len(out_smiles) / max(len(smiles), 1):.2f}x, "
+              f"n_variants={n_var})", flush=True)
+        return out_smiles, out_labels
+
     # ---------------- checkpoint ----------------
     def _ckpt_path(self):
         fname = f"{self.name}_{self.dataset}_{self.seed}.pt"
@@ -212,6 +257,13 @@ class ChemBERTaModel(BaseMolModel):
         set_seed(self.seed)
         device = self._resolve_device()
         self.net = self._build_net()
+
+        # B1: augmentasi HANYA menyentuh training set, dan HANYA untuk variant="aug".
+        # Ditempatkan sebelum perhitungan pos_weight/alpha: karena label direplikasi
+        # proporsional, rasio kelas tak berubah -> pos_weight identik dgn model base,
+        # sehingga satu-satunya perbedaan eksperimen tetap "melihat SMILES acak atau tidak".
+        if self.augment_train:
+            train_smiles, train_labels = self._augment_train(train_smiles, train_labels)
 
         # BUG FIX: harus digate oleh variant=="v3" -- tanpa ini, model "base" (dipakai tes1/
         # tuned_v1/tuned_v2, HARUS identik dgn sebelum Category C) diam-diam ikut memakai Focal
@@ -267,7 +319,11 @@ class ChemBERTaModel(BaseMolModel):
             print(f"[chemberta:{self.variant}] resume {self.dataset} seed={self.seed} "
                   f"dari epoch {start_epoch}")
 
-        for epoch in range(start_epoch, self.cfg["epochs"]):
+        # B1: dgn data 4x, 1 epoch = 4x gradient step. `augment_epochs` (di-set scripts/16
+        # lewat --epochs) memungkinkan menyamakan jumlah STEP dgn model base, sehingga
+        # perbandingan tidak bisa dibantah sebagai "menang karena dilatih lebih lama".
+        n_epochs = self.augment_epochs or self.cfg["epochs"]
+        for epoch in range(start_epoch, n_epochs):
             self.net.train()
             for input_ids, attn, y in train_loader:
                 input_ids, attn, y = input_ids.to(device), attn.to(device), y.to(device)

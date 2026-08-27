@@ -8,9 +8,12 @@ def get_model(name: str, dataset: str, seed: int, tasks: list[str]) -> BaseMolMo
     if name == "rf":
         from src.models.rf_model import RFModel
         return RFModel(dataset, seed, tasks)
-    if name in ("chemberta", "chemberta_v3"):
+    if name == "chemberta" or name.startswith("chemberta_"):
+        # "chemberta" -> base; "chemberta_v3" -> v3; "chemberta_aug" -> aug (B1);
+        # "chemberta_s1"/"chemberta_s2" -> replikasi lintas-split (B2, perilaku = base,
+        # nama beda semata agar checkpoint & file prediksi tidak menimpa hasil split utama).
         from src.models.chemberta_model import ChemBERTaModel
-        variant = "base" if name == "chemberta" else "v3"
+        variant = "base" if name == "chemberta" else name.split("_", 1)[1]
         return ChemBERTaModel(dataset, seed, tasks, variant=variant)
     if name in ("dmpnn", "dmpnn_v3"):
         from src.models.dmpnn_model import DMPNNModel
