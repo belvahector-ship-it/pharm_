@@ -21,11 +21,15 @@ model dominance are accounted for.
   touching at most ~2.3% of the majority class.
 - **A one-knob validation gate fixes it.** Turning TTA off whenever the validation
   minority ratio drops below 0.15 restores ClinTox to 0.985 with no cost elsewhere.
-- **A per-molecule gate turns the fix into a net gain.** Gating on the disagreement
-  between a molecule's solo and TTA-averaged prediction — instead of the binary
-  dataset-level rule — recovers BBBP/BACE's mild TTA losses and edges past the no-TTA
-  baseline everywhere (up to +0.043 AUC, *d* = 2.70), and this cheap disagreement
-  signal outperforms the true per-augmentation variance as a gating criterion.
+- **A per-molecule gate beats the binary gate, but not reliably the no-TTA baseline.**
+  Gating on the disagreement between a molecule's solo and TTA-averaged prediction —
+  instead of the binary dataset-level rule — improves on that rule on all three datasets
+  (up to +0.043 AUC on BBBP, *d* = 2.70). Against solo ChemBERTa (no TTA) it is
+  essentially flat on BBBP (+0.002, *p* = 0.15), lower on BACE (−0.007, *p* = 0.055)
+  and only marginally higher on ClinTox (+0.001, *p* = 0.034). The cheap disagreement
+  signal has a mean AUC at least as high as the true per-augmentation std/IQR on every
+  dataset, but that edge is small and reaches *p* < 0.05 only on ClinTox (*p* = 0.034).
+  All *p*-values here are uncorrected paired *t*-tests over 10 seeds.
 - **Ensembling is conditional, not automatic.** Selective, cross-validated fusion lifts
   ClinTox to 0.992 (*p* < 0.001), but on BBBP/BACE no fusion strategy reliably beats the
   single best model — a negative result reported openly rather than papered over.
@@ -46,9 +50,9 @@ model dominance are accounted for.
 
 | Instance-level TTA gate | BBBP | BACE | ClinTox |
 |---|:---:|:---:|:---:|
-| Solo (no TTA)   | 0.7075 | 0.7921 | 0.9851 |
+| Solo (no TTA)   | 0.7075 | **0.7921** | 0.9851 |
 | Binary gate (minority ratio) | 0.6666 | 0.7589 | 0.9851 |
-| Instance gate (disagreement) | **0.7093** | **0.7851** | **0.9862** |
+| Instance gate (disagreement) | **0.7093** | 0.7851 | **0.9862** |
 
 Full tables, significance tests (paired t-test, Cohen's *d*, bootstrap CI, Holm–
 Bonferroni, Wilcoxon), and the underlying per-seed predictions are in
